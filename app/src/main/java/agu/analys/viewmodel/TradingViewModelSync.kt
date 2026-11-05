@@ -534,6 +534,7 @@ fun TradingViewModel.syncRealBalancesToPositionStore(
         }
     }
     refreshSpotPosition()
+    agu.analys.bridge.AgentTradingCommandHandler.publishPortfolioSnapshot(getApplication<android.app.Application>())
 }
 
 fun TradingViewModel.updateForegroundServiceState() {

@@ -218,8 +218,11 @@ class AgentHttpServer(private val context: Context) {
             // --- POLLING ENDPOINTS (fallback) ---
             get("/signals/latest") {
                 val f = File(bridge.getDir(), "latest.json")
-                if (f.exists()) call.respondFile(f)
-                else call.respond(HttpStatusCode.NotFound, """{"error":"no signal yet"}""")
+                if (f.exists()) {
+                    call.respondText(f.readText(), ContentType.Application.Json, HttpStatusCode.OK)
+                } else {
+                    call.respondText("""{"error":"no signal yet"}""", ContentType.Application.Json, HttpStatusCode.NotFound)
+                }
             }
             get("/signals/history") {
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
@@ -233,8 +236,19 @@ class AgentHttpServer(private val context: Context) {
             }
             get("/portfolio") {
                 val f = File(bridge.getDir(), "portfolio.json")
-                if (f.exists()) call.respondFile(f)
-                else call.respond(HttpStatusCode.NotFound, """{"error":"no portfolio"}""")
+                if (f.exists()) {
+                    call.respondText(f.readText(), ContentType.Application.Json, HttpStatusCode.OK)
+                } else {
+                    // Jika belum ada file di disk, bangun snapshot secara dinamis dari coordinator aktif
+                    val dynamicPortfolio = AgentTradingCommandHandler.buildPortfolioSnapshot(context)
+                    if (dynamicPortfolio != null) {
+                        val payload = json.encodeToString(dynamicPortfolio)
+                        runCatching { f.writeText(payload) }
+                        call.respondText(payload, ContentType.Application.Json, HttpStatusCode.OK)
+                    } else {
+                        call.respondText("""{"error":"no portfolio"}""", ContentType.Application.Json, HttpStatusCode.NotFound)
+                    }
+                }
             }
 
             // --- AGENT-ASSISTED TRADING ENDPOINTS (V3) ---
@@ -358,7 +372,7 @@ class AgentHttpServer(private val context: Context) {
 
     companion object {
         const val PORT = 8765
-        const val HOST = "127.0.0.1"
+        const val HOST = "0.0.0.0"
         private val PING_PERIOD = 15.seconds
         private val PING_TIMEOUT = 15.seconds
 

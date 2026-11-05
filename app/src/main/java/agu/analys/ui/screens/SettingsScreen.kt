@@ -866,10 +866,12 @@ fun SettingsScreen(viewModel: TradingViewModel, onBack: () -> Unit, modifier: Mo
             },
             confirmButton = {
                 TextButton(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("omp-install", prepared.command))
                     val ok = OmpBridgeInstaller.runInTermux(context, prepared.command)
                     Toast.makeText(
                         context,
-                        if (ok) "Termux dibuka — ekstensi akan ditulis" else "Termux tidak terpasang atau tidak merespons",
+                        if (ok) "Perintah dikirim ke Termux & disalin ke clipboard" else "Termux tidak terpasang (perintah disalin ke clipboard)",
                         Toast.LENGTH_LONG
                     ).show()
                 }) { Text("Jalankan di Termux", color = TvGreen) }

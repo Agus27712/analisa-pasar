@@ -468,6 +468,9 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
             sim = simCoordinator,
             priceProvider = { symbol -> marketDataCoordinator.dashboardTicks.value[symbol]?.price }
         )
+        viewModelScope.launch(Dispatchers.IO) {
+            agu.analys.bridge.AgentTradingCommandHandler.publishPortfolioSnapshot(application)
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════

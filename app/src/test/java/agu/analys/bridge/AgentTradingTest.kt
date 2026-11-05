@@ -120,9 +120,9 @@ class AgentTradingTest {
         val status = AgentTradingCommandHandler.getTradingStatus(context)
         assertFalse(status.isRealBuyEnabled)
         assertEquals(8765, status.port)
-        assertEquals("127.0.0.1", status.host)
+        assertEquals(AgentHttpServer.HOST, status.host)
         val jsonStr = json.encodeToString(status)
-        assertTrue("isi status host: $jsonStr", jsonStr.contains("\"host\":\"127.0.0.1\""))
+        assertTrue("isi status host: $jsonStr", jsonStr.contains("\"host\":\"${AgentHttpServer.HOST}\""))
         assertTrue("isi status port: $jsonStr", jsonStr.contains("\"port\":8765"))
     }
 }

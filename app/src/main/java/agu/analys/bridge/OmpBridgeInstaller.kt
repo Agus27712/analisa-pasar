@@ -25,8 +25,11 @@ object OmpBridgeInstaller {
     /** Direktori aset hasil `syncOmpExtensionAssets` (di-generate saat build dari `tools/oh-my-pi-extension`). */
     const val ASSET_DIR = "omp-extension"
 
-    /** Tujuan di dalam Termux — direktori ekstensi agen OMP. */
-    const val DESTINATION_DIR = "~/.omp/agent/extension/analisa-pasar"
+    /** Tujuan utama di dalam Termux (standar ekstensi OMP 18+). */
+    const val DESTINATION_DIR = "~/.omp/agent/extensions/analisa-pasar"
+
+    /** Tujuan alternatif untuk kompatibilitas nama direktori tunggal. */
+    const val ALT_DESTINATION_DIR = "~/.omp/agent/extension/analisa-pasar"
 
     data class Prepared(val fileName: String, val base64: String, val command: String)
 
@@ -39,24 +42,35 @@ object OmpBridgeInstaller {
     }
 
     fun buildInstallCommand(base64: String, fileName: String = "index.ts"): String =
-        "mkdir -p $DESTINATION_DIR && printf '%s' '$base64' | base64 -d > $DESTINATION_DIR/$fileName"
+        "mkdir -p $DESTINATION_DIR $ALT_DESTINATION_DIR && printf '%s' '$base64' | base64 -d > $DESTINATION_DIR/$fileName && cp $DESTINATION_DIR/$fileName $ALT_DESTINATION_DIR/$fileName"
 
     /**
-     * Mengirim perintah pemasangan ke Termux lewat intent `com.termux.RUN_COMMAND`.
-     * Tidak bisa dipastikan suksesnya — yang pasti hanya "Termux berhasil dibuka".
-     * @return `true` bila Termux menerima intent (Termux terpasang), `false` bila tidak.
+     * Mengirim perintah pemasangan ke Termux lewat RunCommandService (`com.termux.RUN_COMMAND`).
+     * Prasyarat di Termux: `allow-external-apps=true` di `~/.termux/termux.properties`.
+     * @return `true` bila Termux menerima intent, `false` bila tidak.
      */
     fun runInTermux(context: Context, command: String): Boolean {
         val intent = Intent("com.termux.RUN_COMMAND").apply {
-            setPackage("com.termux")
+            setClassName("com.termux", "com.termux.app.RunCommandService")
             putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
             putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", command))
+            putExtra("com.termux.RUN_COMMAND_WORKDIR", "/data/data/com.termux/files/home")
+            putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
         }
         return try {
-            context.startActivity(intent)
-            true
-        } catch (_: android.content.ActivityNotFoundException) {
-            false
+            val component = context.startService(intent)
+            component != null
+        } catch (_: Exception) {
+            // Fallback jika background service ditolak ROM, buka aplikasi Termux langsung
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage("com.termux")
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent)
+                    true
+                } else false
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 }

@@ -2,7 +2,7 @@
  * analisa-pasar Agent Bridge — extension untuk omp
  *
  * Path (OMP):
- *   ~/.omp/agent/extension/analisa-pasar/index.ts
+ *   ~/.omp/agent/extensions/analisa-pasar/index.ts
  *
  * Syarat app:
  *   Agent Bridge ON → http://127.0.0.1:8765  +  ws://127.0.0.1:8765/ws/signals

@@ -31,7 +31,8 @@ class OmpBridgeInstallerTest {
 
         assertTrue(command.contains("mkdir -p"))
         assertTrue(command.contains("printf '%s'"))
-        assertTrue(command.endsWith("${OmpBridgeInstaller.DESTINATION_DIR}/index.ts"))
+        assertTrue(command.contains("${OmpBridgeInstaller.DESTINATION_DIR}/index.ts"))
+        assertTrue(command.contains("${OmpBridgeInstaller.ALT_DESTINATION_DIR}/index.ts"))
         assertTrue("tidak boleh ada baris baru", "\n" !in command)
         assertTrue("command memuat base64 apa adanya", command.contains(base64))
     }

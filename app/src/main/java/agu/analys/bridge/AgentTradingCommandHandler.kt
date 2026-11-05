@@ -63,6 +63,211 @@ object AgentTradingCommandHandler {
     }
 
     /**
+     * Membangun snapshot portofolio dari state coordinator aktif (real atau simulasi).
+     */
+    fun buildPortfolioSnapshot(context: Context): AgentPortfolioOutput? {
+        val prefs = AppPreferences(context)
+        val ex = prefs.marketDataSource.name
+        val isToko = prefs.marketDataSource == MarketDataSource.TOKOCRYPTO
+        val rate = agu.analys.util.ExchangeRateManager.usdtIdrRate.value
+        val effectiveRate = if (rate > 0.0) rate else 16000.0
+
+        val real = realCoordinator
+        val isRealBuy = real?.isRealBuyEnabled?.value ?: false
+
+        if (isRealBuy && real != null) {
+            val totalBalances = real.realIndodaxBalance.value
+            val freeBalances = real.realFreeBalance.value
+            val lockedBalances = real.realLockedBalance.value
+            val avgBuyPrices = real.realAvgBuyPrices.value
+
+            val idrFree = freeBalances["idr"] ?: freeBalances["IDR"] ?: totalBalances["idr"] ?: totalBalances["IDR"] ?: 0.0
+            val usdtFree = freeBalances["usdt"] ?: freeBalances["USDT"] ?: totalBalances["usdt"] ?: totalBalances["USDT"] ?: 0.0
+
+            val assetList = mutableListOf<AgentAsset>()
+            var cryptoValIdr = 0.0
+            var cryptoValUsdt = 0.0
+
+            val allCoins = (totalBalances.keys + freeBalances.keys).distinct()
+            for (key in allCoins) {
+                val k = key.lowercase()
+                if (k == "idr" || k == "usdt" || k == "usd" || k == "usdc" || k == "busd" || k == "bidr") continue
+                val totalQty = totalBalances[key] ?: totalBalances[key.uppercase()] ?: 0.0
+                val freeQty = freeBalances[key] ?: freeBalances[key.uppercase()] ?: totalQty
+                val lockedQty = lockedBalances[key] ?: lockedBalances[key.uppercase()] ?: (totalQty - freeQty).coerceAtLeast(0.0)
+                if (totalQty <= 0.00000001) continue
+
+                val coinUpper = key.uppercase()
+                val symbolUsdt = "${coinUpper}USDT"
+                val symbolIdr = "${coinUpper}IDR"
+                val isUsdt = isToko || resolvePrice(symbolUsdt, null) > 0.0
+                val primarySymbol = if (isUsdt) symbolUsdt else symbolIdr
+                val curPrice = resolvePrice(primarySymbol, null)
+                val avgPrice = avgBuyPrices[coinUpper] ?: avgBuyPrices[key.lowercase()] ?: 0.0
+                val effPrice = if (curPrice > 0.0) curPrice else avgPrice
+
+                val pnlPct = if (avgPrice > 0.0 && effPrice > 0.0) ((effPrice - avgPrice) / avgPrice) * 100.0 else 0.0
+                val pnlVal = if (avgPrice > 0.0 && effPrice > 0.0) (effPrice - avgPrice) * totalQty else 0.0
+
+                if (isUsdt) {
+                    val valUsdt = totalQty * effPrice
+                    cryptoValUsdt += valUsdt
+                    cryptoValIdr += (valUsdt * effectiveRate)
+                } else {
+                    val valIdr = totalQty * effPrice
+                    cryptoValIdr += valIdr
+                    cryptoValUsdt += if (effectiveRate > 0.0) (valIdr / effectiveRate) else 0.0
+                }
+
+                assetList.add(
+                    AgentAsset(
+                        symbol = primarySymbol,
+                        free = freeQty,
+                        locked = lockedQty,
+                        avgBuyPrice = avgPrice,
+                        currentPrice = effPrice,
+                        pnlPercent = pnlPct,
+                        pnlValue = pnlVal
+                    )
+                )
+            }
+
+            // Tambahkan kas USDT dan IDR sebagai aset terdaftar
+            if (usdtFree > 0.0) {
+                assetList.add(
+                    AgentAsset(
+                        symbol = "USDT",
+                        free = usdtFree,
+                        locked = lockedBalances["usdt"] ?: lockedBalances["USDT"] ?: 0.0,
+                        avgBuyPrice = 1.0,
+                        currentPrice = 1.0,
+                        pnlPercent = 0.0,
+                        pnlValue = 0.0
+                    )
+                )
+            }
+            if (idrFree > 0.0) {
+                assetList.add(
+                    AgentAsset(
+                        symbol = "IDR",
+                        free = idrFree,
+                        locked = lockedBalances["idr"] ?: lockedBalances["IDR"] ?: 0.0,
+                        avgBuyPrice = 1.0,
+                        currentPrice = 1.0,
+                        pnlPercent = 0.0,
+                        pnlValue = 0.0
+                    )
+                )
+            }
+
+            val totalIdr = idrFree + (usdtFree * effectiveRate) + cryptoValIdr
+            val totalUsdt = usdtFree + (if (effectiveRate > 0.0) idrFree / effectiveRate else 0.0) + cryptoValUsdt
+
+            return AgentPortfolioOutput(
+                ts = System.currentTimeMillis(),
+                exchange = ex,
+                totalIdrValue = totalIdr,
+                totalUsdtValue = totalUsdt,
+                assets = assetList
+            )
+        }
+
+        // Fallback ke portofolio simulasi (paper trading) jika mode riil mati atau kosong
+        val sim = simCoordinator
+        if (sim != null) {
+            val wallet = sim.wallet.value
+            val assetList = mutableListOf<AgentAsset>()
+            var cryptoValIdr = 0.0
+            var cryptoValUsdt = 0.0
+
+            for ((coin, totalQty) in wallet.coinBalances) {
+                if (totalQty <= 0.00000001) continue
+                val coinUpper = coin.uppercase()
+                val lockedQty = wallet.lockedCoinBalances[coin] ?: 0.0
+                val freeQty = (totalQty - lockedQty).coerceAtLeast(0.0)
+                val isUsdt = wallet.isUsdtPosition(coinUpper)
+                val primarySymbol = if (isUsdt) "${coinUpper}USDT" else "${coinUpper}IDR"
+                val curPrice = resolvePrice(primarySymbol, null)
+                val avgPrice = wallet.avgBuyPrices[coinUpper] ?: 0.0
+                val effPrice = if (curPrice > 0.0) curPrice else avgPrice
+
+                val pnlPct = if (avgPrice > 0.0 && effPrice > 0.0) ((effPrice - avgPrice) / avgPrice) * 100.0 else 0.0
+                val pnlVal = if (avgPrice > 0.0 && effPrice > 0.0) (effPrice - avgPrice) * totalQty else 0.0
+
+                if (isUsdt) {
+                    val valUsdt = totalQty * effPrice
+                    cryptoValUsdt += valUsdt
+                    cryptoValIdr += (valUsdt * effectiveRate)
+                } else {
+                    val valIdr = totalQty * effPrice
+                    cryptoValIdr += valIdr
+                    cryptoValUsdt += if (effectiveRate > 0.0) (valIdr / effectiveRate) else 0.0
+                }
+
+                assetList.add(
+                    AgentAsset(
+                        symbol = primarySymbol,
+                        free = freeQty,
+                        locked = lockedQty,
+                        avgBuyPrice = avgPrice,
+                        currentPrice = effPrice,
+                        pnlPercent = pnlPct,
+                        pnlValue = pnlVal
+                    )
+                )
+            }
+
+            if (wallet.usdtBalance > 0.0) {
+                assetList.add(
+                    AgentAsset(
+                        symbol = "USDT",
+                        free = wallet.getAvailableUsdt(),
+                        locked = wallet.lockedUsdt,
+                        avgBuyPrice = 1.0,
+                        currentPrice = 1.0,
+                        pnlPercent = 0.0,
+                        pnlValue = 0.0
+                    )
+                )
+            }
+            if (wallet.idrBalance > 0.0) {
+                assetList.add(
+                    AgentAsset(
+                        symbol = "IDR",
+                        free = wallet.getAvailableIdr(),
+                        locked = wallet.lockedIdr,
+                        avgBuyPrice = 1.0,
+                        currentPrice = 1.0,
+                        pnlPercent = 0.0,
+                        pnlValue = 0.0
+                    )
+                )
+            }
+
+            val totalIdr = wallet.idrBalance + (wallet.usdtBalance * effectiveRate) + cryptoValIdr
+            val totalUsdt = wallet.usdtBalance + (if (effectiveRate > 0.0) wallet.idrBalance / effectiveRate else 0.0) + cryptoValUsdt
+
+            return AgentPortfolioOutput(
+                ts = System.currentTimeMillis(),
+                exchange = "$ex (SIMULASI)",
+                totalIdrValue = totalIdr,
+                totalUsdtValue = totalUsdt,
+                assets = assetList
+            )
+        }
+
+        return null
+    }
+
+    /**
+     * Mempublikasikan snapshot portofolio ke berkas lokal dan EventBus (WebSocket/SSE).
+     */
+    fun publishPortfolioSnapshot(context: Context) {
+        val snapshot = buildPortfolioSnapshot(context) ?: return
+        AgentOutputBridge.getInstance(context).emitPortfolio(snapshot)
+    }
+
+    /**
      * Status kesiapan sistem trading bridge.
      */
     fun getTradingStatus(context: Context): AgentTradingStatusResponse {
