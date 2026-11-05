@@ -46,7 +46,7 @@ class AgentOutputBridge(private val context: Context) {
         if (!isEnabled()) { 
 			AppLogManager.info(
 				"AgentBridge",
-				SKIP emit (agent_output_enabled_false) ${signal.symbol}
+				"SKIP emit (agent_output_enabled_false) ${signal.symbol}"
 			)
 			return
         try {
