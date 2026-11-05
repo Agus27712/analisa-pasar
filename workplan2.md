@@ -5725,3 +5725,28 @@ diselaraskan, bukan kode aplikasi yang diubah untuk membungkus bug.
 lewat `syncOmpExtensionAssets` (diverifikasi dari `app/build/generated/omp-assets`). Jalur
 otomatis (`RUN_COMMAND`) tidak bisa dibuktikan dari mesin ini — butuh Termux dengan
 `allow-external-apps=true` di HP owner.
+
+### 91.7 Kurung tutup hilang di `AgentOutputBridge.emitSignal` — run `Release APK` gagal (2026-11-05)
+
+**Gejala:** run `Release APK` [`41963726244`](https://github.com/Agus27712/analisa-pasar/actions/runs/41963726244)
+(commit `87122b5`) dan run [`41965128032`](https://github.com/Agus27712/analisa-pasar/actions/runs/41965128032)
+(commit `15f6c73`) sama-sama **gagal** pada langkah `Build signed release APK`
+(`:app:compileReleaseKotlin FAILED`), padahal run terakhir yang sukses adalah
+[`41870173572`](https://github.com/Agus27712/analisa-pasar/actions/runs/41870173572) di `a77e440`.
+
+**Sebab:** commit `87122b5` mengubah `if (!isEnabled()) return` menjadi blok `if (!isEnabled()) { ... return`
+tetapi **kurung tutup blok itu tidak ikut ditulis** — baris berikutnya langsung `try {`. Kurung yang
+hilang membuat seluruh isi sesudahnya terbaca sebagai isi blok `if`, sehingga Kotlin melaporkan
+rangkaian error yang menyesatkan di berkas lain: `maintainRolling` tidak ketemu, `companion`
+tidak ketemu, `Missing '}'`, dan semua rujukan ke `AgentOutputBridge.getInstance` / `getDir` /
+`getLatest` di `AgentHttpServer.kt`, `TradingForegroundService.kt`, dan `TradingViewModelSync.kt`
+ikut unresolved. Commit `15f6c73` hanya membetulkan tanda kutip log `SKIP emit ...`, bukan kurungnya.
+
+**Perbaikan (2026-11-05):** menambahkan kurung tutup blok `if` sebelum `try {` di
+`app/src/main/java/agu/analys/bridge/AgentOutputBridge.kt`, sekaligus merapikan indentasi tab yang
+terbentuk pada blok `emitSignal`. Verifikasi: hitung kurung sadar-string pada berkas kini seimbang
+(depth akhir 0, sebelumnya 1); hash blob di GitHub (`459925c...`) sama dengan berkas lokal sebelum
+perbaikan, jadi yang gagal di CI ialah berkas yang sama. **Belum diverifikasi build lokal**
+(Gradle di mesin ini tidak bisa jalan karena symlink `~/.gradle` menunjuk ke
+`/var/tmp/pvszombie-gradle-home` yang tidak ada), dan **rilis belum dijalankan ulang** —
+owner perlu menjalankan `Release APK` (`workflow_dispatch`) atau `Unit Tests (Manual)` untuk membuktikan hijau.

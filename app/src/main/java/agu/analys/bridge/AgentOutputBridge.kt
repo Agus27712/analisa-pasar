@@ -43,12 +43,13 @@ class AgentOutputBridge(private val context: Context) {
 	}
 
     fun emitSignal(signal: AgentSignalOutput) {
-        if (!isEnabled()) { 
-			AppLogManager.info(
-				"AgentBridge",
-				"SKIP emit (agent_output_enabled_false) ${signal.symbol}"
-			)
-			return
+        if (!isEnabled()) {
+            AppLogManager.info(
+                "AgentBridge",
+                "SKIP emit (agent_output_enabled_false) ${signal.symbol}"
+            )
+            return
+        }
         try {
             latestRef.set(signal)
 
