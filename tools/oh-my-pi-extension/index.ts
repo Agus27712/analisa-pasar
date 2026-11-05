@@ -1,172 +1,258 @@
 /**
- * oh-my-pi extension V2 - support Polling + WebSocket Push
- * Path pemasangan di Termux: ~/.config/oh-my-pi/extensions/analisa-pasar/index.ts
+ * analisa-pasar Agent Bridge — extension untuk omp 18.x
+ *
+ * Path (OMP 18):
+ *   ~/.omp/agent/extensions/analisa-pasar/index.ts
+ *
+ * Syarat app:
+ *   Agent Bridge V2 ON → http://127.0.0.1:8765  +  ws://127.0.0.1:8765/ws/signals
+ *
+ * Format: export default function (pi) — wajib di omp 18 (bukan export const tools).
  */
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
 type Signal = {
-  ts: number
-  exchange: string
-  symbol: string
-  quote: string
-  mode: string
-  action: string
-  confidence: number
-  price: number
-  tp1?: number
-  tp2?: number
-  sl?: number
-  reason: string
+  ts: number;
+  exchange: string;
+  symbol: string;
+  quote: string;
+  mode: string;
+  action: string;
+  confidence: number;
+  price: number;
+  tp1?: number;
+  tp2?: number;
+  sl?: number;
+  reason: string;
+  type?: string;
+};
+
+const BRIDGE_HTTP = "http://127.0.0.1:8765";
+const BRIDGE_WS = "ws://127.0.0.1:8765/ws/signals";
+
+let wsClient: WebSocket | null = null;
+const lastSignals: Signal[] = [];
+
+function pushSignal(sig: Signal) {
+  lastSignals.push(sig);
+  if (lastSignals.length > 100) lastSignals.shift();
 }
 
-export const manifest = {
-  name: "analisa-pasar-bridge-v2",
-  version: "2.0.0",
-  description: "Bridge to Agus27712/analisa-pasar with WebSocket push + polling fallback"
-}
-
-let wsClient: WebSocket | null = null
-let lastSignals: Signal[] = []
-
-function connectWs() {
-  if (wsClient && wsClient.readyState === WebSocket.OPEN) return wsClient
+function connectWs(logger?: { info?: (m: string, ...a: unknown[]) => void; debug?: (m: string, ...a: unknown[]) => void }) {
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) return wsClient;
   try {
-    wsClient = new WebSocket("ws://127.0.0.1:8765/ws/signals")
+    wsClient = new WebSocket(BRIDGE_WS);
     wsClient.onmessage = (ev) => {
       try {
-        const sig = JSON.parse(ev.data as string) as Signal
-        lastSignals.push(sig)
-        if (lastSignals.length > 100) lastSignals.shift()
-        console.log(`[analisa-pasar WS] ${sig.symbol} ${sig.confidence}% @ ${sig.price}`)
-      } catch {}
-    }
-    wsClient.onerror = () => { wsClient = null }
-    wsClient.onclose = () => { wsClient = null; setTimeout(connectWs, 3000) }
+        const sig = JSON.parse(String(ev.data)) as Signal;
+        pushSignal(sig);
+        logger?.debug?.(
+          `[analisa-pasar] ${sig.symbol} ${sig.action} ${sig.confidence}% @ ${sig.price}`
+        );
+      } catch {
+        /* frame non-JSON (ping app-level) diabaikan */
+      }
+    };
+    wsClient.onerror = () => {
+      wsClient = null;
+    };
+    wsClient.onclose = () => {
+      wsClient = null;
+      setTimeout(() => connectWs(logger), 3000);
+    };
   } catch {
-    wsClient = null
+    wsClient = null;
   }
-  return wsClient
+  return wsClient;
 }
 
-// Auto connect saat extension load
-connectWs()
-
-export const tools = [
-  {
-    name: "get_latest_signal",
-    description: "Ambil sinyal terakhir - coba dari WS cache dulu, fallback ke HTTP polling",
-    parameters: { type: "object", properties: {} },
-    execute: async () => {
-      // 1. Coba cache WebSocket (realtime)
-      if (lastSignals.length > 0) {
-        const s = lastSignals[lastSignals.length - 1]
-        return {
-          source: "websocket_push",
-          signal: s,
-          summary: `${s.symbol} ${s.confidence}% @ ${s.price} - ${s.reason}`,
-          actionable: s.confidence >= 70
-        }
-      }
-      // 2. Fallback polling HTTP
-      try {
-        const res = await fetch("http://127.0.0.1:8765/signals/latest", { signal: AbortSignal.timeout(3000) })
-        if (!res.ok) return { error: "No signal yet" }
-        const data = await res.json() as Signal
-        return { source: "http_polling", signal: data, actionable: data.confidence >= 70 }
-      } catch (e) {
-        return { error: `Bridge mati atau belum aktif. Pastikan app analisa-pasar jalan & toggle ON. ${e}` }
-      }
-    }
-  },
-  {
-    name: "subscribe_signals",
-    description: "Subscribe live signals via WebSocket. Return sinyal baru yang masuk dalam jeda waktu waitMs (ms). Cocok buat scalping.",
-    parameters: {
-      type: "object",
-      properties: {
-        waitMs: { type: "number", default: 10000, description: "Jeda waktu tunggu sinyal masuk (ms)" }
-      }
-    },
-    execute: async ({ waitMs }: { waitMs?: number }) => {
-      connectWs()
-      const startLen = lastSignals.length
-      const timeoutMs = waitMs || 10000
-      await new Promise(r => setTimeout(r, timeoutMs))
-      const newOnes = lastSignals.slice(startLen)
-      return {
-        received: newOnes.length,
-        signals: newOnes,
-        note: newOnes.length === 0 ? "Tidak ada sinyal baru dalam window ini, coba polling history" : "Realtime push diterima"
-      }
-    }
-  },
-  {
-    name: "get_signal_history",
-    description: "Ambil riwayat sinyal (polling) buat analisa trend",
-    parameters: {
-      type: "object",
-      properties: {
-        limit: { type: "number", default: 20, description: "Jumlah sinyal maksimal" }
-      }
-    },
-    execute: async ({ limit }: { limit?: number }) => {
-      try {
-        const res = await fetch(`http://127.0.0.1:8765/signals/history?limit=${limit || 20}`)
-        const data = await res.json()
-        return { count: data.length, signals: data }
-      } catch (e) {
-        return { error: `Gagal ambil history sinyal: ${e}` }
-      }
-    }
-  },
-  {
-    name: "get_portfolio",
-    description: "Ambil data portofolio dari app",
-    parameters: { type: "object", properties: {} },
-    execute: async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:8765/portfolio")
-        if (!res.ok) return { error: "Belum ada data portofolio" }
-        return await res.json()
-      } catch (e) {
-        return { error: `Gagal fetch portfolio: ${e}` }
-      }
-    }
-  },
-  {
-    name: "write_research_log",
-    description: "Tulis hasil riset agen ke dokumen Markdown",
-    parameters: {
-      type: "object",
-      properties: {
-        symbol: { type: "string" },
-        analysis: { type: "string" },
-        decision: { type: "string", enum: ["BUY", "SELL", "HOLD", "WAIT"] }
-      },
-      required: ["symbol", "analysis", "decision"]
-    },
-    execute: async ({ symbol, analysis, decision }: { symbol: string, analysis: string, decision: string }) => {
-      const fs = await import("fs")
-      const dir = `${process.env.HOME}/storage/documents/analisa-pasar/research`
-      await fs.promises.mkdir(dir, { recursive: true })
-      const path = `${dir}/${symbol}_${Date.now()}.md`
-      await fs.promises.writeFile(path, `# ${symbol} - ${new Date().toISOString()}\nDecision: ${decision}\n\n${analysis}\n`)
-      return { saved: path }
-    }
+async function fetchLatest(): Promise<
+  | { source: string; signal: Signal; summary: string; actionable: boolean }
+  | { error: string }
+> {
+  if (lastSignals.length > 0) {
+    const s = lastSignals[lastSignals.length - 1];
+    return {
+      source: "websocket_push",
+      signal: s,
+      summary: `${s.symbol} ${s.action} ${s.confidence}% @ ${s.price} — ${s.reason}`,
+      actionable: s.confidence >= 70 && s.action !== "HOLD",
+    };
   }
-]
+  try {
+    const res = await fetch(`${BRIDGE_HTTP}/signals/latest`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return { error: "No signal yet (bridge ON tapi belum ada EMIT non-HOLD)" };
+    const data = (await res.json()) as Signal;
+    pushSignal(data);
+    return {
+      source: "http_polling",
+      signal: data,
+      summary: `${data.symbol} ${data.action} ${data.confidence}% @ ${data.price} — ${data.reason}`,
+      actionable: data.confidence >= 70 && data.action !== "HOLD",
+    };
+  } catch (e) {
+    return {
+      error: `Bridge mati / tidak reachable di ${BRIDGE_HTTP}. App analisa-pasar jalan + sakelar Agent Bridge ON? ${e}`,
+    };
+  }
+}
 
-export const systemPrompt = `
-Kamu mengonsumsi sinyal dari aplikasi Android analisa-pasar.
+function textResult(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+    details: payload,
+  };
+}
 
-Kamu punya 2 mode koneksi:
-- PUSH (WebSocket): realtime, pakai subscribe_signals untuk menerima sinyal detik itu juga. Cocok untuk scalping.
-- POLLING (HTTP): fallback, pakai get_latest_signal.
+export default function analisaPasarBridge(pi: ExtensionAPI) {
+  const z = pi.zod;
 
-Aturan operasional:
-1. Untuk scalping, prioritaskan subscribe_signals (tunggu 10 detik) untuk menangkap push realtime.
-2. Skor keyakinan (confidence):
-   - < 60: HOLD
-   - 60 - 69: WAIT & pantau struktur
-   - >= 70: Analisis mendalam dan catat ke log riset
-3. Jangan pernah eksekusi transaksi uang riil tanpa konfirmasi eksplisit dari pengguna.
-`
+  connectWs(pi.logger);
+
+  pi.on("session_start", async (_event, ctx) => {
+    connectWs(pi.logger);
+    ctx.ui.notify("analisa-pasar bridge loaded (WS :8765)", "info");
+  });
+
+  pi.registerTool({
+    name: "get_latest_signal",
+    label: "Latest signal",
+    description:
+      "Ambil sinyal terakhir dari analisa-pasar: cache WebSocket dulu, fallback HTTP /signals/latest",
+    parameters: z.object({}),
+    async execute(_toolCallId, _params) {
+      return textResult(await fetchLatest());
+    },
+  });
+
+  pi.registerTool({
+    name: "subscribe_signals",
+    label: "Subscribe signals",
+    description:
+      "Tunggu push WebSocket beberapa detik, kembalikan sinyal yang masuk di jendela itu (plus cache)",
+    parameters: z.object({
+      seconds: z
+        .number()
+        .min(3)
+        .max(60)
+        .default(15)
+        .describe("Durasi tunggu detik (3–60)"),
+    }),
+    async execute(_toolCallId, params) {
+      const seconds = params.seconds ?? 15;
+      connectWs(pi.logger);
+      const before = lastSignals.length;
+      await new Promise((r) => setTimeout(r, seconds * 1000));
+      const fresh = lastSignals.slice(before);
+      return textResult({
+        waited_seconds: seconds,
+        ws_open: wsClient?.readyState === WebSocket.OPEN,
+        new_count: fresh.length,
+        cache_total: lastSignals.length,
+        signals: fresh.length > 0 ? fresh : lastSignals.slice(-5),
+        note:
+          fresh.length === 0
+            ? "Tidak ada push baru. Engine app harus EMIT (non-HOLD) saat jendela ini."
+            : undefined,
+      });
+    },
+  });
+
+  pi.registerTool({
+    name: "get_signal_history",
+    label: "Signal history",
+    description: "Riwayat sinyal dari HTTP /signals/history",
+    parameters: z.object({
+      limit: z.number().min(1).max(100).default(20).describe("Jumlah maksimal"),
+    }),
+    async execute(_toolCallId, params) {
+      const limit = params.limit ?? 20;
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/signals/history?limit=${limit}`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        const data = await res.json();
+        return textResult({
+          count: Array.isArray(data) ? data.length : 0,
+          signals: data,
+        });
+      } catch (e) {
+        return textResult({ error: `Gagal history: ${e}` });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "get_portfolio",
+    label: "Portfolio",
+    description: "Portofolio dari HTTP /portfolio bridge analisa-pasar",
+    parameters: z.object({}),
+    async execute() {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/portfolio`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return textResult({ error: "Belum ada data portofolio" });
+        return textResult(await res.json());
+      } catch (e) {
+        return textResult({ error: `Gagal portfolio: ${e}` });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "bridge_health",
+    label: "Bridge health",
+    description: "Cek GET /health Agent Bridge V2 di localhost:8765",
+    parameters: z.object({}),
+    async execute() {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/health`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        const body = await res.text();
+        return textResult({
+          ok: res.ok,
+          status: res.status,
+          body,
+          ws_open: wsClient?.readyState === WebSocket.OPEN,
+          cache_signals: lastSignals.length,
+        });
+      } catch (e) {
+        return textResult({ ok: false, error: String(e) });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "write_research_log",
+    label: "Write research log",
+    description: "Tulis log riset Markdown (bukan eksekusi order)",
+    parameters: z.object({
+      symbol: z.string(),
+      analysis: z.string(),
+      decision: z.enum(["BUY", "SELL", "HOLD", "WAIT"]),
+    }),
+    async execute(_toolCallId, params) {
+      const { symbol, analysis, decision } = params;
+      try {
+        const fs = await import("node:fs/promises");
+        const home = process.env.HOME || "/data/data/com.termux/files/home";
+        const dir = `${home}/storage/shared/analisa-pasar/research`;
+        await fs.mkdir(dir, { recursive: true });
+        const path = `${dir}/${symbol}_${Date.now()}.md`;
+        await fs.writeFile(
+          path,
+          `# ${symbol} — ${new Date().toISOString()}\n\nDecision: **${decision}**\n\n${analysis}\n`
+        );
+        return textResult({ saved: path });
+      } catch (e) {
+        return textResult({
+          error: `Gagal tulis log (izin storage Termux?). ${e}`,
+        });
+      }
+    },
+  });
+}
