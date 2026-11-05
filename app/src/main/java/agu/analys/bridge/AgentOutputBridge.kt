@@ -36,15 +36,19 @@ class AgentOutputBridge(private val context: Context) {
 
     private val latestRef = AtomicReference<AgentSignalOutput?>()
 
-    fun isEnabled(): Boolean {
-        val prefsCustom = context.getSharedPreferences("krypto_analysis_prefs", Context.MODE_PRIVATE)
-        if (prefsCustom.getBoolean("agent_output_enabled", false)) return true
-        val prefsDefault = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-        return prefsDefault.getBoolean("agent_output_enabled", false)
-    }
+	fun isEnabled(): Boolean {
+		return runCatching {
+			agu.analys.util.AppPreferences(context).isAgentOutputEnabled
+		}.getOrDefault(false)
+	}
 
     fun emitSignal(signal: AgentSignalOutput) {
-        if (!isEnabled()) return
+        if (!isEnabled()) { 
+			AppLogManager.info(
+				"AgentBridge",
+				SKIP emit (agent_output_enabled_false) ${signal.symbol}
+			)
+			return
         try {
             latestRef.set(signal)
 
