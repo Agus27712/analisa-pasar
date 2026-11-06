@@ -5787,3 +5787,93 @@ Agent Bridge V2 sebelumnya hanya bersifat baca-saja (*read-only*), di mana agen 
 7. **Unit Test (`AgentTradingTest.kt`):**
    - Menambahkan 5 skenario pengujian unit: validasi normalisasi simbol USDT/IDR, penolakan saat mode real mati atau PIN terkunci, penolakan kuotasi tidak sah, serialisasi/deserialisasi JSON model, dan pengujian endpoint HTTP `/api/v1/trading/status`.
 
+
+## 93. Keamanan & akurasi Agent Bridge: token tulis, breakdown engine, akuntansi fill (2026-11-06)
+
+Latar: audit bridge atas pertanyaan owner "apa yang dikirim app ke agen (OMP)". Tiga temuan
+dipilih owner untuk diperbaiki. Baseline uji bridge sebelum perubahan: **13 test, 0 gagal**
+(AgentBridgeServerTest 3, AgentBridgeTest 3, AgentTradingTest 5, OmpBridgeInstallerTest 2).
+
+### 93.1 Endpoint tulis sekarang menuntut token; server bind loopback
+
+- `AgentHttpServer.HOST` dulu dilaporkan §91.8 sebagai `127.0.0.1` tetapi kenyataannya
+  literal `"0.0.0.0"` — port 8765 tebuka ke seluruh LAN. Kini benar-benar loopback
+  (`HOST = "127.0.0.1"`), konsisten dengan cara ekstensi OMP memanggil bridge di
+  perangkat yang sama.
+- Token baru `AppPreferences.agentBridgeToken` (key `agent_bridge_token_v1`): dibuat
+  sekali dari `SecureRandom` 16 byte (32 char hex), persistent. Server membacanya sekali
+  saat rute dipasang.
+- Gerbang `requireAgentToken` dipasang di **lima** endpoint rute `api/v1/trading`:
+  `GET /status`, `POST /buy`, `POST /sell`, `POST /cancel`, `GET /orders/{id}`, via header
+  `X-Agent-Token`. Fail-closed: token kosong → semua permintaan tulis ditolak. Rute baca
+  publik (`/health`, `/`, `/signals/*`, `/portfolio`, `/ws/signals`, `/events`) tidak
+  berubah, supaya smoke test CI (writing-free) tidak terganggu.
+- Distribusi token: `OmpBridgeInstaller` kini juga menulis `agent-bridge-token.txt` ke
+  `~/.omp/agent/extensions/analisa-pasar/` **dan** `~/.omp/agent/extension/analisa-pasar/`.
+  Ekstensi `index.ts` membaca token dari berkas itu atau env `ANALISA_PASAR_TOKEN`, lalu
+  mengirim header `X-Agent-Token` di semua panggilan `api/v1/trading/*` dan menerjemahkan
+  respons 401 jadi pesan "jalankan ulang pemasangan ekstensi".
+
+### 93.2 `TechnicalBreakdown` diisi dari data engine yang benar-benar ada
+
+- Dulu hanya `orderbookPressure` yang diisi; `rsi/macd/emaTrend` selalu null dan
+  `volumeSpike` selalu false, padahal sinyal membawa `AISignalState.mtf`
+  (`ScalpingMtfSnapshot`) yang memuat arah tren, status konfluensi, dan setup.
+- Builder murni baru `AgentSignalBreakdown.build(orderbookPressure, mtf, scalpingSetup,
+  scalpingRegime)` di `AgentOutputModels.kt`: `emaTrend`/`mtfDirection` = arah bias MTF,
+  `mtfStatusTitle` + `mtfCheckpointsOk` = status konfluensi, `volumeSpike` = checkpoint
+  **Volume** terkonfirmasi, `scalpingSetup`/`scalpingRegime` diteruskan.
+- Field baru nullable: `mtfDirection`, `mtfStatusTitle`, `mtfCheckpointsOk`,
+  `scalpingSetup`, `scalpingRegime`. `rsi`/`macd` **tetap null dengan sengaja** — snapshot
+  sinyal tidak membawa angka indikator mentah; null berarti "tidak tersedia", bukan feed
+  rusak, dan agen dilarang mengarang isinya.
+- Kedua titik emit (`TradingViewModelSync.kt`, transisi mode dan emit ulang sinyal
+  terakhir) kini mem-pass `mtf` ke `emitAgentSignalIfEnabled`.
+
+### 93.3 Respons order riil memuat order nyata, bukan hasil pembagian nominal
+
+- Kasus lapangan (SOXSB 2026-11-05): agen menerima `price` = harga acuan model
+  (`82,60`) sedangkan fill bursa `82,67`; cost basis owner 6,0 × 1,0008 × 1,004044 =
+  6,02908 USDT justru cocok dengan model acuan, bukan fill — artinya "harga" yang
+  dilaporkan bridge bukan harga bursa.
+- `RealTradeExecutor` kini menulis `RealFillRecord` (`lastFill`, @Volatile) di setiap
+  cabang akhir `executeTrade`: `executedQty` nyata dari bursa / `waitForBuyFill`,
+  `_orderId`/`clientOrderId`, status FILLED / PARTIALLY_FILLED / NEW / REJECTED, dan
+  `requestedPrice` (harga acuan yang dikirim). Record ditulis **sebelum** callback
+  `onResult` supaya pembaca setelah `await()` pasti melihatnya.
+- `RealTradeCoordinator.lastRealFillFor(pair, side)` mengambil record berumur ≤ 120 detik
+  yang cocok pair + sisi. `handleBuy`/`handleSell` menggunakannya untuk mengisi
+  `orderId`, `clientOrderId`, `price`, `quantity`, `status` (via `realFillStatus`),
+  `executedQty`, dan field baru `requestedPrice` di `AgentTradeResponse`. Logika
+  `finalExecutedQty` / saldo **tidak disentuh** — record ini hanya pelaporan.
+- Path simulasi: `executeSimulationBuy/Sell` kini memakai `order.filledAvgPrice` /
+  `order.filledQuantity` dari mesin simulasi (efek slippage ikut), bukan nilai ketikan.
+
+### 93.4 Lancar kecil ekstensi
+
+- `fetchLatest` ekstensi kini menghitung `age_sec` (usia sinyal vs `Date.now()`; nilai
+  negatif dicetak `?` bila jam perangkat melonjak) dan menaruhnya di ringkasan. Tanpa
+  policy TTL v1 v2 — hanya pelaporan.
+
+### 93.5 Uji & kontrol negatif
+
+- Baseline sebelum perubahan: **13 test bridge, 0 gagal**. Setelah perubahan: **24 test
+  bridge, 0 gagal** (AgentSignalBreakdownTest 4 baru, AgentTradingTest 5→10,
+  AgentBridgeServerTest 3→5, AgentBridgeTest 3 dan OmpBridgeInstallerTest 2 tak berubah).
+- Uji baru: `AgentSignalBreakdownTest` (4 perilaku builder), `AgentBridgeServerTest`
+  (HTTP nyata: 401 tanpa token, 401 token salah, token benar tidak 401, `/health` tetap
+  terbuka, `HOST == 127.0.0.1`), `AgentTradingTest` (serialisasi `requestedPrice`
+  termasuk field opsional bisa absen; source-scan: 4 panggilan `recordFill` di executor,
+  `lastRealFillFor` di kedua handler, `mtf` di kedua titik emit, berkas token di kedua
+  direktori installer).
+- Kontrol negatif (terukur): (1) gerbang token `/buy` dilepas → uji auth `AgentBridgeServerTest`
+  merah; (2) `mtf` tak di-pass di emit → source-scan emit merah; (3) `recordFill` cabang
+  REJECTED dilepas → source-scan executor merah. Semua dikembalikan setelah dibuktikan
+  merah; run uji: `gradle-test4` (3 RED), `gradle-test5` (24/24 hijau).
+- Catatan desain: token bridge disimpan di prefs terpisah `agent_bridge_prefs_v1`
+  (plaintext) — kegagalan AndroidKeyStore akan menghapus seluruh EncryptedSharedPreferences
+  sehingga token daur ulang tak terduga; token bukan kredensial bursa, jadi kestabilan
+  menang atas enkripsi berlapis. Kredensial bursa tetap di EncryptedSharedPreferences.
+- `OmpBridgeInstallerTest` tetap hijau: perintah pemasangan TANPA token tidak berubah
+  (kompatibel jalur lama); dengan token, berkas `agent-bridge-token.txt` ditulis ke dua
+  direktori.

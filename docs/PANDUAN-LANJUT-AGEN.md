@@ -2,7 +2,11 @@
 
 > **Baca ini dulu.** Dokumen ini adalah titik masuk untuk agen/engineer berikutnya: status terkini,
 > apa yang sudah selesai, apa berikutnya, dan **perangkap yang sudah pernah ditemukan** supaya tidak
-> diulang. Terakhir diperbarui: **2026-11-03** (slider SWING: 18 knob, default = literal engine lama,
+> diulang. Terakhir diperbarui: **2026-11-06** (audit bridge keamanan & data: endpoint tulis
+> `/api/v1/trading/*` wajib header `X-Agent-Token`, `HOST` loopback `127.0.0.1` faktual,
+> `TechnicalBreakdown` diisi dari snapshot MTF, respons order riil dari `RealFillRecord` —
+> `workplan2.md` §93, laporan `docs/laporan_temuan_bugs_agent_bridge_keamanan_data.md`).
+> Sebelumnya **2026-11-03** (slider SWING: 18 knob, default = literal engine lama,
 > tanpa riset; plus catatan dataset `tokocrypto_v7` yang hilang membuat 13 uji intraday merah).
 > Sebelumnya **2026-10-24** (sweep 5 mode exit: 0/90 sel positif, exit-only ditutup lagi; diagnostik
 > persentil entry: entry khas di persentil 93 harga 1 hari; prioritas tetap pengukuran

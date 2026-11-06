@@ -195,6 +195,56 @@ class RealTradeExecutor(
     /** True bila masih ada order riil yang sedang diproses. Dipakai UI untuk menonaktifkan tombol. */
     fun isTradeInFlight(): Boolean = tradeInFlight.get()
 
+    /**
+     * Hasil order riil terakhir yang dikirim [executeTrade] (2026-11-06).
+     *
+     * Sebelumnya bridge pengembangannya hanya `price` harga acuan dan `executedQty`
+     * hasil pembagian nominal — bukan data order bursa — sehingga agen menghitung
+     * cost basis dari angka yang tidak pernah tereksekusi (kasus SOXSB 2026-11-05:
+     * acuan 82,60 dipakai padahal fill 82,67). Record ini ditulis **sebelum**
+     * callback `onResult` agar pembaca setelah `await()` sudah melihat nilainya.
+     */
+    data class RealFillRecord(
+        val pair: String,
+        /** "buy" atau "sell" (huruf kecil, sesuai argumen `type`). */
+        val side: String,
+        val orderId: String,
+        val clientOrderId: String,
+        val requestedPrice: Double,
+        val requestedQty: Double,
+        /** Kuantitas nyata yang dieksekusi bursa (`waitForBuyFill` / `executedQty` bursa). */
+        val executedQty: Double,
+        /** Status terakhir yang diketahui: FILLED / PARTIALLY_FILLED / NEW / REJECTED / bursa mentah. */
+        val status: String,
+        val ts: Long = System.currentTimeMillis()
+    )
+
+    @Volatile
+    var lastFill: RealFillRecord? = null
+        private set
+
+    private fun recordFill(
+        pair: String,
+        type: String,
+        orderId: String,
+        clientOrderId: String,
+        requestedPrice: Double,
+        requestedQty: Double,
+        executedQty: Double,
+        status: String
+    ) {
+        lastFill = RealFillRecord(
+            pair = pair,
+            side = type.lowercase(),
+            orderId = orderId,
+            clientOrderId = clientOrderId,
+            requestedPrice = requestedPrice,
+            requestedQty = requestedQty,
+            executedQty = executedQty,
+            status = status
+        )
+    }
+
     fun executeTrade(
         pair: String,
         type: String,
@@ -335,6 +385,8 @@ class RealTradeExecutor(
 
                     if (executedQty <= MIN_EXECUTED_QTY) {
                         onStatusUpdate("BUY terkirim tapi belum FILLED. TP tidak dipasang.")
+                        recordFill(pair, type, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId },
+                            execPrice, quantity, 0.0, "NEW")
                         withContext(Dispatchers.Main) {
                             onResult(true, "BUY berhasil di server $sourceLabel, tapi belum FILLED.")
                         }
@@ -411,6 +463,9 @@ class RealTradeExecutor(
 
                     onStatusUpdate("BUY + TP: $finalMsg")
                     agu.analys.util.AppLogManager.trade("RealOrderFilled", "✅ [$sourceLabel REAL FILLED] $pair: Qty $finalExecutedQty @ $priceFmt. Auto Sell: $finalMsg")
+                    recordFill(pair, type, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId },
+                        execPrice, quantity, executedQty,
+                        if (executedQty < quantity * 0.99) "PARTIALLY_FILLED" else "FILLED")
                     withContext(Dispatchers.Main) {
                         onResult(true, "BUY berhasil!\nAuto Sell: $finalMsg")
                     }
@@ -424,6 +479,8 @@ class RealTradeExecutor(
                         if (filledQty <= MIN_EXECUTED_QTY) {
                             // Order baru terpasang di orderbook: jangan catat saldo/posisi/jurnal seolah sudah terisi
                             onStatusUpdate("BUY terkirim tapi belum terisi.")
+                            recordFill(pair, type, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId },
+                                execPrice, quantity, 0.0, "NEW")
                             agu.analys.util.AppLogManager.trade("RealOrderPending", "⏳ [$sourceLabel REAL] BUY $pair terkirim, belum terisi. Posisi tidak dicatat.")
                             withContext(Dispatchers.Main) {
                                 onResult(true, "BUY terkirim di server $sourceLabel, tapi belum terisi (posisi belum dicatat).")
@@ -434,6 +491,19 @@ class RealTradeExecutor(
                         finalExecutedQty = filledQty
                     }
                     onStatusUpdate(buyResult.message)
+                    recordFill(
+                        pair = pair,
+                        type = type,
+                        orderId = buyResult.orderId,
+                        clientOrderId = buyResult.clientOrderId.ifBlank { clientOrderId },
+                        requestedPrice = execPrice,
+                        requestedQty = quantity,
+                        // Untuk BUY sudah dipastikan nyata via waitForBuyFill; untuk SELL
+                        // pakai hasil bursa bila tersedia, bukan `quantity` apa adanya.
+                        executedQty = if (isBuy) finalExecutedQty
+                            else buyResult.executedQty.takeIf { it > MIN_EXECUTED_QTY } ?: quantity,
+                        status = buyResult.status.ifBlank { "FILLED" }
+                    )
                     agu.analys.util.AppLogManager.trade("RealOrderSuccess", "✅ [$sourceLabel REAL] Order $type $pair berhasil dikirim @ $priceFmt: ${buyResult.message}")
                     withContext(Dispatchers.Main) {
                         onResult(true, buyResult.message)
@@ -504,6 +574,8 @@ class RealTradeExecutor(
                     "❌ [$sourceLabel REAL ORDER DITOLAK] $pair ${type.uppercase()}: ${buyResult.message}"
                 )
                 onStatusUpdate(buyResult.message)
+                recordFill(pair, type, buyResult.orderId, buyResult.clientOrderId.ifBlank { clientOrderId },
+                    execPrice, quantity, 0.0, "REJECTED")
                 withContext(Dispatchers.Main) {
                     onResult(false, buyResult.message)
                 }

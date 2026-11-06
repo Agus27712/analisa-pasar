@@ -154,6 +154,21 @@ class RealTradeCoordinator(
         executor.executeCancelOrder(symbol, orderId, onResult)
     fun executeRealTrade(p: String, t: String, pr: Double, a: Double, tp1: Double, tp2: Double, exchange: String? = null, cb: (Boolean, String) -> Unit) =
         executor.executeTrade(p, t, pr, a, tp1, tp2, exchange, cb)
+
+    /** Umur maksimal record fill yang masih dianggap milik order terakhir (2 menit). */
+    private val FILL_STALE_MS = 120_000L
+
+    /**
+     * Record order riil terakhir untuk (pair, side) yang cocok dan belum basi
+     * (dipakai Agent Bridge supaya respons order memuat executedQty/status nyata,
+     * bukan hasil pembagian nominal — lihat 2026-11-06). `null` bila tidak ada.
+     */
+    fun lastRealFillFor(pairNorm: String, side: String): RealTradeExecutor.RealFillRecord? =
+        executor.lastFill?.takeIf {
+            System.currentTimeMillis() - it.ts <= FILL_STALE_MS &&
+                it.pair.equals(pairNorm, ignoreCase = true) &&
+                it.side.equals(side, ignoreCase = true)
+        }
     fun executeRealSellOrders(
         pair: String,
         totalQuantity: Double,

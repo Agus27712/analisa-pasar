@@ -70,6 +70,39 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   Verifikasi nyata lintas proses: `.github/workflows/bridge-smoke.yml` menjalankan
   `tools/bridge-smoke` (memakai `AgentHttpServer.kt` asli) untuk HTTP/WebSocket/SSE/restart.
 
+- **Endpoint tulis bridge menuntut token; server loopback (2026-11-06).** Rute `api/v1/trading`
+  (`/status`, `/buy`, `/sell`, `/cancel`, `/orders/{id}`) wajib memeriksa header `X-Agent-Token`
+  lewat `ApplicationCall.requireAgentToken(...)` sebelum mencatat respons di
+  `AgentHttpServer.kt` — token di `AppPreferences.agentBridgeToken` (key
+  `agent_bridge_token_v1`, SecureRandom 32-hex, dibaca server sekali saat rute dipasang),
+  fail-closed bila kosong. `AgentHttpServer.HOST` = `127.0.0.1` (dulu `"0.0.0.0"` padahal
+  §91.8 mengklaim loopback). Rute baca publik (`/health`, `/`, `/signals/*`, `/portfolio`,
+  `/ws/signals`, `/events`) tetap tanpa token supaya smoke test CI tidak berubah. Ekstensi
+  menerima token lewat `agent-bridge-token.txt` yang ditulis `OmpBridgeInstaller` ke **kedua**
+  direktori (`extensions/` dan `extension/`), plus fallback env `ANALISA_PASAR_TOKEN`.
+  Penjaga: `AgentBridgeServerTest.endpoint tulis ...` (401/401/non-401/health terbuka).
+- **Respons order riil bridge memuat data order nyata dari `RealFillRecord`, bukan hasil
+  pembagian nominal (2026-11-06).** `RealTradeExecutor` menulis `lastFill` di setiap cabang
+  akhir `executeTrade` (FILLED/PARTIALLY_FILLED/NEW/REJECTED, `executedQty` nyata, harga
+  acuan) **sebelum** callback `onResult`; `handleBuy`/`handleSell` membacanya via
+  `RealTradeCoordinator.lastRealFillFor(pair, side)` (umur ≤ 120 detik) untuk mengisi
+  `orderId`/`clientOrderId`/`price`/`status`/`executedQty`/`requestedPrice` di
+  `AgentTradeResponse`. Dilarang mengklaim `FILLED` hanya karena callback sukses — status
+  dipilih `realFillStatus(...)`. Record ini **pelaporan saja**: dilarang mengubah
+  `finalExecutedQty`, update saldo, atau jurnal dari situ (kasus SOXSB 2026-11-05:
+  `price` yang dilaporkan bridge = harga acuan model, bukan fill 82,67 — laporan
+  `docs/laporan_temuan_bugs_agent_bridge_keamanan_data.md`). Path simulasi memakai
+  `order.filledAvgPrice`/`filledQuantity` mesin simulasi. Penjaga: source-scan
+  `AgentTradingTest` (≥5 `recordFill`, `lastRealFillFor` di kedua handler).
+- **`TechnicalBreakdown` diisi dari snapshot engine, dan `rsi`/`macd` tetap null dengan
+  sengaja (2026-11-06).** Emit sinyal mem-pass `signal.mtf` ke
+  `emitAgentSignalIfEnabled` (kedua titik di `TradingViewModelSync.kt`); builder murninya
+  `AgentSignalBreakdown.build(...)` mengisi `emaTrend`/`mtfDirection` (arah bias MTF),
+  `mtfStatusTitle`, `mtfCheckpointsOk`, `volumeSpike` (checkpoint Volume), plus
+  `scalpingSetup`/`scalpingRegime`. Snapshot sinyal **tidak membawa** angka RSI/MACD
+  mentah, jadi field itu wajib tetap null — mengisinya dengan angka karangan adalah bug,
+  bukan perbaikan. Penjaga: `AgentSignalBreakdownTest` + source-scan dua titik emit.
+
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 
 - **Kepemilikan edge pemicu harus tunggal.** Pemicu yang bersifat *edge-once* (mis. trailing

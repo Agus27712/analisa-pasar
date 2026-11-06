@@ -42,6 +42,24 @@ object AgentTradingCommandHandler {
     private val tradeInFlight = AtomicBoolean(false)
 
     /**
+     * Status order riil untuk respons bridge (2026-11-06): `FILLED`/`PARTIALLY_FILLED`
+     * dipilih dari record fill nyata, bukan mengklaim `FILLED` hanya karena callback
+     * sukses. Record hilang (jalur lama / kredensial belum sempat) mempertahankan
+     * perilaku lama supaya pemanggil tidak perlu tahu perubahannya.
+     */
+    private fun realFillStatus(
+        success: Boolean,
+        fill: agu.analys.viewmodel.RealTradeExecutor.RealFillRecord?
+    ): String = when {
+        !success -> "REJECTED"
+        fill == null -> "FILLED"
+        fill.executedQty <= 0.0 -> "NEW"
+        fill.status.isNotBlank() -> fill.status.uppercase()
+        fill.executedQty >= fill.requestedQty * 0.99 -> "FILLED"
+        else -> "PARTIALLY_FILLED"
+    }
+
+    /**
      * Didaftarkan oleh [agu.analys.viewmodel.TradingViewModel] saat siklus hidup aktif.
      */
     fun register(
@@ -433,16 +451,22 @@ object AgentTradingCommandHandler {
             val (success, message) = withTimeoutOrNull(25_000L) { deferred.await() }
                 ?: (false to "Waktu tunggu konfirmasi transaksi dari bursa habis (timeout).")
 
+            // 2026-11-06 — respons memuat data order nyata (record fill dari executor),
+            // bukan `executedQty` hasil pembagian nominal dan status `FILLED` karangan.
+            val fill = real.lastRealFillFor(normSymbol, "buy")
             AgentTradeResponse(
                 success = success,
                 message = message,
+                orderId = fill?.orderId?.takeIf { it.isNotBlank() },
+                clientOrderId = fill?.clientOrderId?.takeIf { it.isNotBlank() },
                 exchange = req.exchange,
                 symbol = normSymbol,
                 side = "BUY",
-                price = price,
-                quantity = quantity,
-                status = if (success) "FILLED" else "REJECTED",
-                executedQty = if (success) quantity else 0.0,
+                price = fill?.requestedPrice ?: price,
+                quantity = fill?.requestedQty?.takeIf { it > 0.0 } ?: quantity,
+                status = realFillStatus(success, fill),
+                executedQty = if (success) (fill?.executedQty ?: quantity) else 0.0,
+                requestedPrice = fill?.requestedPrice,
                 isSimulation = false
             )
         } finally {
@@ -560,16 +584,21 @@ object AgentTradingCommandHandler {
             val (success, message) = withTimeoutOrNull(25_000L) { deferred.await() }
                 ?: (false to "Waktu tunggu konfirmasi transaksi jual habis (timeout).")
 
+            // 2026-11-06 — data order nyata dari record fill executor (sama dengan BUY).
+            val fill = real.lastRealFillFor(normSymbol, "sell")
             AgentTradeResponse(
                 success = success,
                 message = message,
+                orderId = fill?.orderId?.takeIf { it.isNotBlank() },
+                clientOrderId = fill?.clientOrderId?.takeIf { it.isNotBlank() },
                 exchange = req.exchange,
                 symbol = normSymbol,
                 side = "SELL",
-                price = price,
-                quantity = quantity,
-                status = if (success) "FILLED" else "REJECTED",
-                executedQty = if (success) quantity else 0.0,
+                price = fill?.requestedPrice ?: price,
+                quantity = fill?.requestedQty?.takeIf { it > 0.0 } ?: quantity,
+                status = realFillStatus(success, fill),
+                executedQty = if (success) (fill?.executedQty ?: quantity) else 0.0,
+                requestedPrice = fill?.requestedPrice,
                 isSimulation = false
             )
         } finally {
@@ -749,16 +778,19 @@ object AgentTradingCommandHandler {
 
         return when (result) {
             is SimulationOrderResult.Success -> {
+                val simFilled = result.order.status == SimulationOrderStatus.FILLED
                 AgentTradeResponse(
                     success = true,
                     message = result.message,
                     orderId = result.order.id,
                     symbol = symbol,
                     side = "BUY",
-                    price = price,
+                    // 2026-11-06 — harga/qty fill nyata dari mesin simulasi (slippage diterapkan),
+                    // bukan nilai ketikan acuan.
+                    price = result.order.filledAvgPrice.takeIf { it > 0.0 } ?: price,
                     quantity = quantity,
                     status = result.order.status.name,
-                    executedQty = if (result.order.status == SimulationOrderStatus.FILLED) quantity else 0.0,
+                    executedQty = if (simFilled) (result.order.filledQuantity.takeIf { it > 0.0 } ?: quantity) else 0.0,
                     isSimulation = true
                 )
             }
@@ -814,16 +846,19 @@ object AgentTradingCommandHandler {
 
         return when (result) {
             is SimulationOrderResult.Success -> {
+                val simFilled = result.order.status == SimulationOrderStatus.FILLED
                 AgentTradeResponse(
                     success = true,
                     message = result.message,
                     orderId = result.order.id,
                     symbol = symbol,
                     side = "SELL",
-                    price = price,
+                    // 2026-11-06 — harga/qty fill nyata dari mesin simulasi (slippage diterapkan),
+                    // bukan nilai ketikan acuan.
+                    price = result.order.filledAvgPrice.takeIf { it > 0.0 } ?: price,
                     quantity = quantity,
                     status = result.order.status.name,
-                    executedQty = if (result.order.status == SimulationOrderStatus.FILLED) quantity else 0.0,
+                    executedQty = if (simFilled) (result.order.filledQuantity.takeIf { it > 0.0 } ?: quantity) else 0.0,
                     isSimulation = true
                 )
             }

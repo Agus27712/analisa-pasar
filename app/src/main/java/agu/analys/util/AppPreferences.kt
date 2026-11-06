@@ -16,6 +16,10 @@ import org.json.JSONObject
 
 /** Local user configuration. Runtime market data is deliberately kept elsewhere. */
 class AppPreferences(context: Context) {
+    /** Penyimpanan token bridge — terpisah, tidak ikut pemulihan KeyStore prefs utama. */
+    private val bridgePrefs: android.content.SharedPreferences =
+        context.getSharedPreferences(PREFS_BRIDGE_NAME, Context.MODE_PRIVATE)
+
     private val prefs: android.content.SharedPreferences = try {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -511,6 +515,30 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_AGENT_OUTPUT_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_AGENT_OUTPUT_ENABLED, value).apply()
 
+    /**
+     * Token Agent Bridge (2026-11-06). Endpoint tulis rute `api/v1/trading` menuntut
+     * header `X-Agent-Token` dengan nilai ini; berkas token diinstal bersama ekstensi OMP
+     * lewat [agu.analys.bridge.OmpBridgeInstaller].
+     *
+     * Sengaja **tidak** memakai EncryptedSharedPreferences: token ini memungkinkan order
+     * pada perangkat sendiri (bukan kredensial bursa), dan stabilitas lintas instans/
+     * lintas restart lebih penting daripada enkripsi berlapis — kegagalan AndroidKeyStore
+     * (jalur pemulihan) menghapus seluruh isi prefs utama dan token lama "menghilang"
+     * begitu saja. Nilainya 32 karakter hex dari SecureRandom 16 byte; bila kosong,
+     * server tetap fail-closed (semua request tulis ditolak).
+     */
+    var agentBridgeToken: String
+        get() {
+            val existing = bridgePrefs.getString(KEY_AGENT_BRIDGE_TOKEN, null)
+            if (!existing.isNullOrBlank()) return existing
+            val bytes = ByteArray(16)
+            java.security.SecureRandom().nextBytes(bytes)
+            val token = bytes.joinToString("") { "%02x".format(it) }
+            bridgePrefs.edit().putString(KEY_AGENT_BRIDGE_TOKEN, token).apply()
+            return token
+        }
+        set(value) = bridgePrefs.edit().putString(KEY_AGENT_BRIDGE_TOKEN, value).apply()
+
     var priceFeedThrottleMs: Long
         get() = prefs.getLong(KEY_PRICE_FEED_THROTTLE_MS, PriceFeedThrottler.DEFAULT_THROTTLE_MS)
         set(value) = prefs.edit().putLong(KEY_PRICE_FEED_THROTTLE_MS, value.coerceAtLeast(0L)).apply()
@@ -761,5 +789,7 @@ class AppPreferences(context: Context) {
         private const val KEY_REAL_SIM_SYNC_ENABLED = "real_sim_sync_enabled_v1"
         private const val KEY_PRICE_FEED_THROTTLE_MS = "price_feed_throttle_ms_v1"
         private const val KEY_AGENT_OUTPUT_ENABLED = "agent_output_enabled"
+        private const val KEY_AGENT_BRIDGE_TOKEN = "agent_bridge_token_v1"
+        private const val PREFS_BRIDGE_NAME = "agent_bridge_prefs_v1"
     }
 }

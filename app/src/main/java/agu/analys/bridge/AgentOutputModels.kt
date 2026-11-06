@@ -1,5 +1,6 @@
 package agu.analys.bridge
 
+import agu.analys.model.ScalpingMtfSnapshot
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.Serializable
@@ -44,8 +45,63 @@ data class TechnicalBreakdown(
     val macd: String? = null,
     val emaTrend: String? = null,
     val volumeSpike: Boolean = false,
-    val orderbookPressure: String? = null
+    val orderbookPressure: String? = null,
+    // ---- 2026-11-06: data nyata dari snapshot engine (`AISignalState.mtf`) ----
+    // `rsi`/`macd` tetap null karena snapshot sinyal memang tidak membawa angka
+    // indikator mentah — jangan dianggap "feed rusak"; null di sini berarti
+    // "tidak tersedia", dan agen dilarang mengarang isinya.
+    val mtfDirection: String? = null,
+    val mtfStatusTitle: String? = null,
+    val mtfCheckpointsOk: Int? = null,
+    val scalpingSetup: String? = null,
+    val scalpingRegime: String? = null
 )
+
+/**
+ * Pembentuk [TechnicalBreakdown] dari apa yang **benar-benar** dimiliki sinyal
+ * (snapshot MTF terstruktur), bukan dari field yang dulu selalu dibiarkan null.
+ *
+ * Sebelum 2026-11-06 hanya `orderbookPressure` yang pernah diisi sehingga agen
+ * melihat `rsi:null, macd:null, emaTrend:null, volumeSpike:false` padahal
+ * `AISignalState.mtf` memuat arah tren, status konfluensi, dan setup — data itu
+ * kini ikut terbit. `volumeSpike` diisi dari checkpoint **Volume** (konfirmasi
+ * volume valid, bukan tebakan RVOL — RVOL mentah tidak dibawa sinyal).
+ */
+object AgentSignalBreakdown {
+    fun build(
+        orderbookPressure: String?,
+        mtf: ScalpingMtfSnapshot? = null,
+        scalpingSetup: String? = null,
+        scalpingRegime: String? = null
+    ): TechnicalBreakdown {
+        val mtfNyata = mtf?.takeIf { it != ScalpingMtfSnapshot() }
+        if (mtfNyata == null) {
+            return TechnicalBreakdown(
+                orderbookPressure = orderbookPressure,
+                scalpingSetup = scalpingSetup?.takeIf { it.isNotBlank() },
+                scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() }
+            )
+        }
+        val volumeConfirmed = mtfNyata.checkpoints
+            .firstOrNull { it.code == "VOL" || it.label.contains("Volume", ignoreCase = true) }
+            ?.isOk
+            ?: (mtfNyata.setupOk && mtfNyata.triggerOk)
+        return TechnicalBreakdown(
+            // rsi/macd tetap null: snapshot sinyal tidak membawa angka indikator mentah
+            rsi = null,
+            macd = null,
+            emaTrend = mtfNyata.biasDirection.uppercase().takeIf { it.isNotBlank() },
+            volumeSpike = volumeConfirmed,
+            orderbookPressure = orderbookPressure,
+            mtfDirection = mtfNyata.biasDirection.uppercase().takeIf { it.isNotBlank() },
+            mtfStatusTitle = mtfNyata.statusTitle
+                .takeIf { it.isNotBlank() && it != "BELUM TERSEDIA" },
+            mtfCheckpointsOk = mtfNyata.completedCount.takeIf { it > 0 },
+            scalpingSetup = scalpingSetup?.takeIf { it.isNotBlank() },
+            scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() }
+        )
+    }
+}
 
 @Serializable
 data class FeeTruthInfo(

@@ -33,6 +33,13 @@ data class AgentTradeResponse(
     val quantity: Double = 0.0,
     val status: String = "UNKNOWN", // "NEW", "FILLED", "PARTIALLY_FILLED", "REJECTED", "SIMULATED"
     val executedQty: Double = 0.0,
+    /**
+     * Harga acuan yang dikirim ke bursa saat order dibuat (2026-11-06).
+     * `price` di atas kini harga acuan yang sama, tapi untuk order riil keduanya berbeda jika
+     * record fill memuat harga ketikan pemanggil; dipisah supaya agen bisa membedakan
+     * "harga yang diminta" vs "harga acuan model aplikasi".
+     */
+    val requestedPrice: Double? = null,
     val isSimulation: Boolean = false,
     val timestamp: Long = System.currentTimeMillis()
 )

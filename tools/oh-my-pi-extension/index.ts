@@ -30,6 +30,41 @@ type Signal = {
 const BRIDGE_HTTP = "http://127.0.0.1:8765";
 const BRIDGE_WS = "ws://127.0.0.1:8765/ws/signals";
 
+/**
+ * Token Agent Bridge (2026-11-06). Semua rute `/api/v1/trading/*` menuntut header
+ * `X-Agent-Token` (fail-closed di sisi server). Sumber: env `ANALISA_PASAR_TOKEN`
+ * atau berkas `agent-bridge-token.txt` yang ditulis aplikasi saat pemasangan
+ * ekstensi (OmpBridgeInstaller). Header token TIDAK dikirim ke rute baca publik.
+ */
+const TOKEN_FILE = "agent-bridge-token.txt";
+const TOKEN_DIRS = ["extensions", "extension"]; // kedua varian nama direktori OMP
+let tokenCache: string | null = null;
+
+async function bridgeToken(): Promise<string> {
+  if (tokenCache !== null) return tokenCache;
+  const envToken = process.env.ANALISA_PASAR_TOKEN;
+  if (envToken && envToken.trim()) {
+    tokenCache = envToken.trim();
+    return tokenCache;
+  }
+  try {
+    const fs = await import("node:fs/promises");
+    const home = process.env.HOME || "/data/data/com.termux/files/home";
+    for (const dir of TOKEN_DIRS) {
+      const path = `${home}/.omp/agent/${dir}/analisa-pasar/${TOKEN_FILE}`;
+      const raw = await fs.readFile(path, "utf8").catch(() => "");
+      if (raw.trim()) {
+        tokenCache = raw.trim();
+        return tokenCache;
+      }
+    }
+  } catch {
+    // fs tak tersedia → tanpa token; server akan menolak order dengan 401.
+  }
+  tokenCache = "";
+  return tokenCache;
+}
+
 let wsClient: WebSocket | null = null;
 const lastSignals: Signal[] = [];
 
@@ -67,16 +102,18 @@ function connectWs(logger?: { info?: (m: string, ...a: unknown[]) => void; debug
 }
 
 async function fetchLatest(): Promise<
-  | { source: string; signal: Signal; summary: string; actionable: boolean }
+  | { source: string; signal: Signal; summary: string; actionable: boolean; ageSec: number | null }
   | { error: string }
 > {
   if (lastSignals.length > 0) {
     const s = lastSignals[lastSignals.length - 1];
+    const ageSec = Math.round((Date.now() - s.ts) / 1000);
     return {
       source: "websocket_push",
       signal: s,
-      summary: `${s.symbol} ${s.action} ${s.confidence}% @ ${s.price} — ${s.reason}`,
+      summary: `${s.symbol} ${s.action} ${s.confidence}% @ ${s.price} — ${s.reason} (usia sinyal: ${ageSec < 0 ? "?" : ageSec}s)`,
       actionable: s.confidence >= 70 && s.action !== "HOLD",
+      ageSec,
     };
   }
   try {
@@ -86,11 +123,13 @@ async function fetchLatest(): Promise<
     if (!res.ok) return { error: "No signal yet (bridge ON tapi belum ada EMIT non-HOLD)" };
     const data = (await res.json()) as Signal;
     pushSignal(data);
+    const ageSec = Math.round((Date.now() - data.ts) / 1000);
     return {
       source: "http_polling",
       signal: data,
-      summary: `${data.symbol} ${data.action} ${data.confidence}% @ ${data.price} — ${data.reason}`,
+      summary: `${data.symbol} ${data.action} ${data.confidence}% @ ${data.price} — ${data.reason} (usia sinyal: ${ageSec < 0 ? "?" : ageSec}s)`,
       actionable: data.confidence >= 70 && data.action !== "HOLD",
+      ageSec,
     };
   } catch (e) {
     return {
@@ -218,12 +257,16 @@ async function placeOrder(args: OrderArgs, timeoutMs = 25000): Promise<OrderResu
     exchange: args.exchange,
   };
   try {
+    const token = await bridgeToken();
     const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(token ? { "X-Agent-Token": token } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
+    if (res.status === 401) {
+      return { success: false, message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN). Jalankan ulang pemasangan ekstensi dari Pengaturan app.` };
+    }
     return (await res.json()) as OrderResult;
   } catch (e) {
     return { success: false, message: `Gagal kirim order ${args.side}: ${e}` };
@@ -563,9 +606,14 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     parameters: z.object({}),
     async execute() {
       try {
+        const token = await bridgeToken();
         const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/status`, {
+          headers: token ? { "X-Agent-Token": token } : undefined,
           signal: AbortSignal.timeout(4000),
         });
+        if (res.status === 401) {
+          return textResult({ ok: false, error: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN).` });
+        }
         const data = await res.json();
         return textResult(data);
       } catch (e) {
@@ -644,12 +692,16 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       try {
+        const token = await bridgeToken();
         const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/cancel`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(token ? { "X-Agent-Token": token } : {}) },
           body: JSON.stringify(params),
           signal: AbortSignal.timeout(15000),
         });
+        if (res.status === 401) {
+          return textResult({ success: false, message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN).` });
+        }
         const data = await res.json();
         return textResult(data);
       } catch (e) {
@@ -678,9 +730,14 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
           isSimulation: String(params.isSimulation ?? false),
           exchange: params.exchange || "TOKOCRYPTO",
         });
+        const getOrderIdToken = await bridgeToken();
         const res = await fetch(`${BRIDGE_HTTP}/api/v1/trading/orders/${encodeURIComponent(params.orderId)}?${q}`, {
+          headers: getOrderIdToken ? { "X-Agent-Token": getOrderIdToken } : undefined,
           signal: AbortSignal.timeout(10000),
         });
+        if (res.status === 401) {
+          return textResult({ success: false, message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN).` });
+        }
         const data = await res.json();
         return textResult(data);
       } catch (e) {

@@ -663,7 +663,10 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 tp2 = transition.signal.targetPrice2,
                 stopLoss = transition.signal.stopLoss,
                 reasoning = transition.signal.reasoning.joinToString(" • "),
-                orderbookPressure = transition.signal.scalpingScoreCategory.ifBlank { null }
+                orderbookPressure = transition.signal.scalpingScoreCategory.ifBlank { null },
+                mtf = transition.signal.mtf,
+                scalpingSetup = transition.signal.scalpingSetup,
+                scalpingRegime = transition.signal.scalpingRegime
             )
         }
 
@@ -858,7 +861,10 @@ fun TradingViewModel.listenToEngineSignals() {
                     tp2 = signal.targetPrice2,
                     stopLoss = signal.stopLoss,
                     reasoning = signal.reasoning.joinToString(" • "),
-                    orderbookPressure = signal.scalpingScoreCategory.ifBlank { null }
+                    orderbookPressure = signal.scalpingScoreCategory.ifBlank { null },
+                    mtf = signal.mtf,
+                    scalpingSetup = signal.scalpingSetup,
+                    scalpingRegime = signal.scalpingRegime
                 )
             }
         }
@@ -875,7 +881,10 @@ fun TradingViewModel.emitAgentSignalIfEnabled(
     tp2: Double,
     stopLoss: Double,
     reasoning: String,
-    orderbookPressure: String? = null
+    orderbookPressure: String? = null,
+    mtf: agu.analys.model.ScalpingMtfSnapshot? = null,
+    scalpingSetup: String? = null,
+    scalpingRegime: String? = null
 ) {
     val bridge = agu.analys.bridge.AgentOutputBridge.getInstance(getApplication())
     if (!bridge.isEnabled()) return
@@ -896,8 +905,11 @@ fun TradingViewModel.emitAgentSignalIfEnabled(
         tp2 = if (tp2 > 0) tp2 else null,
         sl = if (stopLoss > 0) stopLoss else null,
         reason = reasoning,
-        technical = agu.analys.bridge.TechnicalBreakdown(
-            orderbookPressure = orderbookPressure
+        technical = agu.analys.bridge.AgentSignalBreakdown.build(
+            orderbookPressure = orderbookPressure,
+            mtf = mtf,
+            scalpingSetup = scalpingSetup,
+            scalpingRegime = scalpingRegime
         ),
         feeTruth = agu.analys.bridge.FeeTruthInfo(
             feeRate = feeRate,

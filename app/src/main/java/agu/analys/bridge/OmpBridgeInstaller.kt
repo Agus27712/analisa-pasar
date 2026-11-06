@@ -33,16 +33,26 @@ object OmpBridgeInstaller {
 
     data class Prepared(val fileName: String, val base64: String, val command: String)
 
+    /** Berkas token yang ikut ditulis bersama `index.ts` (dibaca ekstensi untuk header X-Agent-Token). */
+    const val TOKEN_FILE = "agent-bridge-token.txt"
+
     /** Membaca aset dan merakit perintah pemasangan. Melempar bila aset tidak ada. */
     fun prepare(context: Context, fileName: String = "index.ts"): Prepared {
         val bytes = context.assets.open("$ASSET_DIR/$fileName").use { it.readBytes() }
         val base64 = java.util.Base64.getEncoder().encodeToString(bytes)
-        val command = buildInstallCommand(base64, fileName)
+        val token = runCatching {
+            agu.analys.util.AppPreferences(context).agentBridgeToken
+        }.getOrDefault("")
+        val command = buildInstallCommand(base64, fileName, token)
         return Prepared(fileName, base64, command)
     }
 
-    fun buildInstallCommand(base64: String, fileName: String = "index.ts"): String =
-        "mkdir -p $DESTINATION_DIR $ALT_DESTINATION_DIR && printf '%s' '$base64' | base64 -d > $DESTINATION_DIR/$fileName && cp $DESTINATION_DIR/$fileName $ALT_DESTINATION_DIR/$fileName"
+    fun buildInstallCommand(base64: String, fileName: String = "index.ts", bridgeToken: String = ""): String {
+        val core =
+            "mkdir -p $DESTINATION_DIR $ALT_DESTINATION_DIR && printf '%s' '$base64' | base64 -d > $DESTINATION_DIR/$fileName && cp $DESTINATION_DIR/$fileName $ALT_DESTINATION_DIR/$fileName"
+        if (bridgeToken.isBlank()) return core
+        return "$core && printf '%s' '$bridgeToken' > $DESTINATION_DIR/$TOKEN_FILE && cp $DESTINATION_DIR/$TOKEN_FILE $ALT_DESTINATION_DIR/$TOKEN_FILE"
+    }
 
     /**
      * Mengirim perintah pemasangan ke Termux lewat RunCommandService (`com.termux.RUN_COMMAND`).

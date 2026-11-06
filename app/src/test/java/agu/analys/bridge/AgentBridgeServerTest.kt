@@ -58,6 +58,25 @@ class AgentBridgeServerTest {
         }
     }
 
+    private fun httpPost(path: String, body: String, token: String? = null): Pair<Int, String> {
+        val conn = URL("http://127.0.0.1:${AgentHttpServer.PORT}$path").openConnection() as HttpURLConnection
+        conn.connectTimeout = 1_500
+        conn.readTimeout = 1_500
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        if (token != null) conn.setRequestProperty(AgentHttpServer.HEADER_TOKEN, token)
+        return try {
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            code to text
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     @Test
     fun `sakelar menyala membuka port dan stop menutupnya`() {
         runBlocking {
@@ -105,6 +124,49 @@ class AgentBridgeServerTest {
             server.start()
             val retry = server.awaitSettled(20_000)
             assertTrue("keadaan akhir percobaan ulang: $retry", retry is AgentBridgeServerState.Running)
+            server.stop()
+            server.awaitSettled(10_000)
+        }
+    }
+
+    @Test
+    fun `server hanya bind loopback bukan semua antarmuka`() {
+        assertEquals("127.0.0.1", AgentHttpServer.HOST)
+    }
+
+    /**
+     * Keamanan endpoint tulis (2026-11-06): rute `api/v1/trading` menuntut header
+     * `X-Agent-Token` yang cocok dengan token di AppPreferences. Tanpa token atau
+     * token salah → 401 (fail-closed). Token benar → boleh lanjut (bisa 400/500
+     * karena body kosong, tapi BOLEH tidak 401). Rute baca seperti `/health`
+     * tidak boleh ikut terkunci (sudah dijaga uji di atas).
+     */
+    @Test
+    fun `endpoint tulis menuntut X-Agent-Token tanpa token diterima`() {
+        runBlocking {
+            server.start()
+            assertTrue("server tidak menyala", server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+            // Aturan Robolectric: instance Application baru per test, sementara singleton server
+            // memakai context dari saat pertama dibuat — jadi token yang dibandingkan adalah
+            // token yang server sendiri terpasang (lihat lastInstalledBridgeToken).
+            val token = AgentHttpServer.lastInstalledBridgeToken
+            assertTrue("token server tidak boleh kosong", !token.isNullOrBlank())
+            val t = token ?: ""
+
+            val (tanpaToken, badanTanpa) = httpPost("/api/v1/trading/buy", "{}")
+            assertEquals("tetap 401 tanpa token", 401, tanpaToken)
+            assertTrue("badan penolakan menerangkan header: $badanTanpa", badanTanpa.contains("X-Agent-Token"))
+
+            val (tokenSalah, _) = httpPost("/api/v1/trading/buy", "{}", token = "salah-$t")
+            assertEquals("tetap 401 dengan token salah", 401, tokenSalah)
+
+            val (tokenBenar, _) = httpPost("/api/v1/trading/buy", "{}", token = t)
+            assertTrue("token benar tidak boleh 401, dapat $tokenBenar", tokenBenar != 401)
+
+            // Rute baca publik tidak boleh ikut menuntut token.
+            val (healthCode, _) = httpGet("/health")
+            assertEquals("health tanpa token tetap terbuka", 200, healthCode)
+
             server.stop()
             server.awaitSettled(10_000)
         }

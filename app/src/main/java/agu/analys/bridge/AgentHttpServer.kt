@@ -128,6 +128,26 @@ class AgentHttpServer(private val context: Context) {
 
     val isRunning: Boolean get() = _state.value is AgentBridgeServerState.Running
 
+    /**
+     * Gerbang keamanan endpoint tulis rute `api/v1/trading` (2026-11-06).
+     *
+     * Detak masuk wajib membawa [HEADER_TOKEN] yang cocok dengan token di
+     * `AppPreferences.agentBridgeToken` (berkas token diinstal ke Termux bersama
+     * `index.ts` lewat `OmpBridgeInstaller`). Bila token server kosong — mis.
+     * penyimpanan aman gagal dibaca — **semua** permintaan tulis ditolak
+     * (fail-closed), bukan diterima tanpa token.
+     */
+    private suspend fun ApplicationCall.requireAgentToken(expected: String): Boolean {
+        val provided = request.headers[HEADER_TOKEN]
+        if (expected.isNotBlank() && provided != null && provided == expected) return true
+        respondText(
+            """{"success":false,"message":"Ditolak: header $HEADER_TOKEN tidak sesuai token bridge. Periksa berkas token yang diinstal bersama ekstensi OMP."}""",
+            ContentType.Application.Json,
+            HttpStatusCode.Unauthorized
+        )
+        return false
+    }
+
     private fun boot(gen: Int) {
         try {
             val engine = embeddedServer(CIO, port = PORT, host = HOST) { installRoutes() }
@@ -194,6 +214,12 @@ class AgentHttpServer(private val context: Context) {
             maxFrameSize = Long.MAX_VALUE
             masking = false
         }
+        // Token dibaca sekali saat rute dipasang. Bila kosong, semua endpoint tulis
+        // fail-closed (requireAgentToken menolak tanpa token yang cocok).
+        val bridgeToken = runCatching {
+            agu.analys.util.AppPreferences(context).agentBridgeToken
+        }.getOrDefault("")
+        lastInstalledBridgeToken = bridgeToken
         routing {
             get("/") {
                 call.respondText(
@@ -201,8 +227,9 @@ class AgentHttpServer(private val context: Context) {
                     {
                       "status":"ok",
                       "service":"analisa-pasar-agent-bridge-v3",
-                      "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health","/api/v1/trading/status"],
+                      "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health"],
                       "trading": ["POST /api/v1/trading/buy","POST /api/v1/trading/sell","POST /api/v1/trading/cancel","GET /api/v1/trading/orders/{id}"],
+                      "trading_auth": "Semua rute /api/v1/trading/* menuntut header X-Agent-Token (berkas token diinstal bersama ekstensi OMP).",
                       "push": ["/ws/signals (WebSocket)", "/events (SSE)"]
                     }
                     """.trimIndent(),
@@ -254,10 +281,12 @@ class AgentHttpServer(private val context: Context) {
             // --- AGENT-ASSISTED TRADING ENDPOINTS (V3) ---
             route("/api/v1/trading") {
                 get("/status") {
+                    if (!call.requireAgentToken(bridgeToken)) return@get
                     val status = AgentTradingCommandHandler.getTradingStatus(context)
                     call.respondText(json.encodeToString(status), ContentType.Application.Json)
                 }
                 post("/buy") {
+                    if (!call.requireAgentToken(bridgeToken)) return@post
                     try {
                         val body = call.receiveText()
                         val req = json.decodeFromString<AgentTradeRequest>(body)
@@ -277,6 +306,7 @@ class AgentHttpServer(private val context: Context) {
                     }
                 }
                 post("/sell") {
+                    if (!call.requireAgentToken(bridgeToken)) return@post
                     try {
                         val body = call.receiveText()
                         val req = json.decodeFromString<AgentTradeRequest>(body)
@@ -296,6 +326,7 @@ class AgentHttpServer(private val context: Context) {
                     }
                 }
                 post("/cancel") {
+                    if (!call.requireAgentToken(bridgeToken)) return@post
                     try {
                         val body = call.receiveText()
                         val req = json.decodeFromString<AgentCancelRequest>(body)
@@ -315,6 +346,7 @@ class AgentHttpServer(private val context: Context) {
                     }
                 }
                 get("/orders/{id}") {
+                    if (!call.requireAgentToken(bridgeToken)) return@get
                     val orderId = call.parameters["id"] ?: ""
                     val symbol = call.request.queryParameters["symbol"]
                     val isSim = call.request.queryParameters["isSimulation"]?.toBoolean() ?: false
@@ -372,9 +404,30 @@ class AgentHttpServer(private val context: Context) {
 
     companion object {
         const val PORT = 8765
-        const val HOST = "0.0.0.0"
+
+        /**
+         * Hanya loopback (2026-11-06). Sebelumnya `0.0.0.0` membuat port 8765 tebuka ke
+         * seluruh LAN — termasuk `POST /api/v1/trading/buy` — sementara `workplan2.md`
+         * §91.8 mengklaim mengikat `127.0.0.1`. Ekstensi OMP memanggil `127.0.0.1`
+         * di perangkat yang sama, jadi loopback menghilangkan kemampuan tanpa biaya.
+         */
+        const val HOST = "127.0.0.1"
+
+        /** Header token untuk endpoint tulis rute `api/v1/trading`. */
+        const val HEADER_TOKEN = "X-Agent-Token"
+
         private val PING_PERIOD = 15.seconds
         private val PING_TIMEOUT = 15.seconds
+
+        /**
+         * Token yang terakhir terpasang di rute (hanya untuk uji). Di produksi token itu
+         * memang berasal dari `AppPreferences.agentBridgeToken`; uji Robolectric tidak bisa
+         * membaca dua instance Application berbeda, jadi [AgentBridgeServerTest] membaca
+         * dari sini supaya yang dibandingkan tokennya yang server pakai sendiri.
+         */
+        @Volatile
+        var lastInstalledBridgeToken: String? = null
+            private set
 
         @Volatile
         private var INSTANCE: AgentHttpServer? = null
