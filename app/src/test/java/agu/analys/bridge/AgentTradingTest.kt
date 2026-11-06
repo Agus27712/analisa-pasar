@@ -207,6 +207,34 @@ class AgentTradingTest {
     }
 
     @Test
+    fun `sumber memasang pendorong portofolio di server dan mengekspos ws portfolio`() {
+        val server = kode("agu/analys/bridge/AgentHttpServer.kt")
+        assertTrue("server wajib menyalakan pendorong", server.contains("startPortfolioPush()"))
+        assertTrue("rute WS portfolio", server.contains("webSocket(\"/ws/portfolio\")"))
+        assertTrue(
+            "SSE wajib menggabungkan sinyal + portofolio",
+            server.contains("merge(AgentEventBus.signals, AgentEventBus.portfolio)")
+        )
+        assertTrue("label event portfolio", server.contains("event: portfolio"))
+
+        val bridge = kode("agu/analys/bridge/AgentOutputBridge.kt")
+        assertTrue("loop pendorong ada", bridge.contains("fun startPortfolioPush()"))
+        assertTrue("loop memakai snapshot resmi", bridge.contains("buildPortfolioSnapshot(context)"))
+        assertTrue("loop memakai keputusan murni", bridge.contains("AgentPortfolioPusher.shouldEmit("))
+
+        val pusher = kode("agu/analys/bridge/AgentPortfolioPusher.kt")
+        assertTrue("cap mengabaikan urutan aset", pusher.contains("sortedBy { it.symbol }"))
+        assertTrue("heartbeat tersedia", pusher.contains("HEARTBEAT_MS"))
+
+        val ekstensi = java.io.File(System.getProperty("user.dir"), "tools/oh-my-pi-extension/index.ts")
+            .takeIf { it.exists() }
+            ?: java.io.File(System.getProperty("user.dir"), "../tools/oh-my-pi-extension/index.ts")
+        val isi = ekstensi.readText(Charsets.UTF_8)
+        assertTrue("tool subscribe_portfolio ada", isi.contains("name: \"subscribe_portfolio\""))
+        assertTrue("ekstensi menyambung ke ws portfolio", isi.contains("/ws/portfolio"))
+    }
+
+    @Test
     fun `sumber installer menulis berkas token ke kedua direktori Termux`() {
         val cmd = OmpBridgeInstaller.buildInstallCommand("aGVsbG8=", "index.ts", "abc123")
         assertTrue(

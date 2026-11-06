@@ -29,6 +29,7 @@ type Signal = {
 
 const BRIDGE_HTTP = "http://127.0.0.1:8765";
 const BRIDGE_WS = "ws://127.0.0.1:8765/ws/signals";
+const BRIDGE_WS_PORTFOLIO = "ws://127.0.0.1:8765/ws/portfolio";
 
 /**
  * Token Agent Bridge (2026-11-06). Semua rute `/api/v1/trading/*` menuntut header
@@ -67,6 +68,69 @@ async function bridgeToken(): Promise<string> {
 
 let wsClient: WebSocket | null = null;
 const lastSignals: Signal[] = [];
+
+/**
+ * Portofolio (2026-11-06): snapshot dikirim app lewat `/ws/portfolio` saat isinya
+ * berubah (atau heartbeat 5 menit) — bukan tiap tick harga. Disimpan di sini supaya
+ * tool lain bisa membacanya tanpa membuka koneksi baru.
+ */
+type PortfolioAsset = {
+  symbol: string;
+  free: number;
+  locked: number;
+  avgBuyPrice: number;
+  currentPrice: number;
+  pnlPercent: number;
+  pnlValue: number;
+};
+
+type Portfolio = {
+  ts: number;
+  exchange: string;
+  totalIdrValue: number;
+  totalUsdtValue: number;
+  assets: PortfolioAsset[];
+  type?: string;
+};
+
+const lastPortfolios: Portfolio[] = [];
+let portfolioWs: WebSocket | null = null;
+
+function pushPortfolio(p: Portfolio) {
+  lastPortfolios.push(p);
+  if (lastPortfolios.length > 50) lastPortfolios.shift();
+}
+
+function connectPortfolioWs(logger?: {
+  info?: (m: string, ...a: unknown[]) => void;
+  debug?: (m: string, ...a: unknown[]) => void;
+}) {
+  if (portfolioWs && portfolioWs.readyState === WebSocket.OPEN) return portfolioWs;
+  try {
+    portfolioWs = new WebSocket(BRIDGE_WS_PORTFOLIO);
+    portfolioWs.onmessage = (ev) => {
+      try {
+        const p = JSON.parse(String(ev.data)) as Portfolio;
+        pushPortfolio(p);
+        logger?.debug?.(
+          `[analisa-pasar] portofolio ${p.exchange}: ${p.assets.length} aset, P&L ${p.totalUsdtValue.toFixed(2)} USDT`
+        );
+      } catch {
+        /* frame non-JSON diabaikan */
+      }
+    };
+    portfolioWs.onerror = () => {
+      portfolioWs = null;
+    };
+    portfolioWs.onclose = () => {
+      portfolioWs = null;
+      setTimeout(() => connectPortfolioWs(logger), 3000);
+    };
+  } catch {
+    portfolioWs = null;
+  }
+  return portfolioWs;
+}
 
 function pushSignal(sig: Signal) {
   lastSignals.push(sig);
@@ -496,6 +560,41 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         note:
           fresh.length === 0
             ? "Tidak ada push baru. Engine app harus EMIT (non-HOLD) saat jendela ini."
+            : undefined,
+      });
+    },
+  });
+
+  pi.registerTool({
+    name: "subscribe_portfolio",
+    label: "Subscribe portfolio",
+    description:
+      "Terima push snapshot portofolio dari app (perubahan isi atau heartbeat 5 menit) selama jendela detik tertentu",
+    parameters: z.object({
+      seconds: z
+        .number()
+        .min(3)
+        .max(120)
+        .default(20)
+        .describe("Durasi tunggu detik (3–120)"),
+    }),
+    async execute(_toolCallId, params) {
+      const seconds = params.seconds ?? 20;
+      connectPortfolioWs(pi.logger);
+      const before = lastPortfolios.length;
+      await new Promise((r) => setTimeout(r, seconds * 1000));
+      const fresh = lastPortfolios.slice(before);
+      return textResult({
+        waited_seconds: seconds,
+        ws_open: portfolioWs?.readyState === WebSocket.OPEN,
+        new_count: fresh.length,
+        cache_total: lastPortfolios.length,
+        // Selalu sertakan snapshot terbaru (replay bus = 1) walau tidak ada perubahan baru.
+        latest: fresh.length > 0 ? fresh[fresh.length - 1] : lastPortfolios[lastPortfolios.length - 1],
+        updates: fresh,
+        note:
+          fresh.length === 0
+            ? "Tidak ada push baru dalam jendela ini. App mengirim saat isi portofolio berubah atau heartbeat 5 menit; cek /portfolio untuk foto terkini."
             : undefined,
       });
     },

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.encodeToString
@@ -167,7 +168,12 @@ class AgentHttpServer(private val context: Context) {
             }
             server = engine
             _state.value = AgentBridgeServerState.Running
-            AppLogManager.info("AgentHttpServer", "Bridge V2 started $HOST:$PORT (polling+ws+sse)")
+            // Pendorong portofolio hidup bersama server: agen yang baru tersambung tidak
+            // perlu menunggu sinyal pertama untuk menerima snapshot posisi.
+            runCatching { AgentOutputBridge.getInstance(context).startPortfolioPush() }
+            // Pendorong portofolio hidup bersama server: agen yang baru tersambung tidak
+            // perlu menunggu sinyal pertama untuk menerima snapshot posisi.
+                        AppLogManager.info("AgentHttpServer", "Bridge V2 started $HOST:$PORT (polling+ws+sse)")
         } catch (t: Throwable) {
             server = null
             val reason = "${t.javaClass.simpleName}: ${t.message ?: "tanpa pesan"}"
@@ -230,7 +236,7 @@ class AgentHttpServer(private val context: Context) {
                       "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health"],
                       "trading": ["POST /api/v1/trading/buy","POST /api/v1/trading/sell","POST /api/v1/trading/cancel","GET /api/v1/trading/orders/{id}"],
                       "trading_auth": "Semua rute /api/v1/trading/* menuntut header X-Agent-Token (berkas token diinstal bersama ekstensi OMP).",
-                      "push": ["/ws/signals (WebSocket)", "/events (SSE)"]
+                      "push": ["/ws/signals (WebSocket)", "/ws/portfolio (WebSocket)", "/events (SSE: signal + portfolio)"]
                     }
                     """.trimIndent(),
                     ContentType.Application.Json
@@ -388,15 +394,37 @@ class AgentHttpServer(private val context: Context) {
                     try {
                         write("event: ping\ndata: {\"ts\":${System.currentTimeMillis()}}\n\n")
                         flush()
-                        AgentEventBus.signals.collect { signal ->
-                            val payload = json.encodeToString(signal)
-                            write("event: signal\n")
-                            write("data: $payload\n\n")
+                        // Sinyal dan portofolio diberi label per jenis supaya client bisa
+                        // menyaring tanpa membuka koneksi kedua (2026-11-06).
+                        merge(AgentEventBus.signals, AgentEventBus.portfolio).collect { item ->
+                            when (item) {
+                                is AgentSignalOutput -> {
+                                    write("event: signal\n")
+                                    write("data: ${json.encodeToString(item)}\n\n")
+                                }
+                                is AgentPortfolioOutput -> {
+                                    write("event: portfolio\n")
+                                    write("data: ${json.encodeToString(item)}\n\n")
+                                }
+                            }
                             flush()
                         }
                     } catch (e: Exception) {
                         AppLogManager.error("AgentSSE", "SSE error", e)
                     }
+                }
+            }
+            // 3. WebSocket portofolio — snapshot awal dari berkas (replay bus = 1) lalu push
+            webSocket("/ws/portfolio") {
+                try {
+                    AgentEventBus.portfolio.replayCache.lastOrNull()?.let {
+                        send(Frame.Text(json.encodeToString(it)))
+                    }
+                    AgentEventBus.portfolio.collect { snapshot ->
+                        send(Frame.Text(json.encodeToString(snapshot)))
+                    }
+                } catch (e: Exception) {
+                    AppLogManager.error("AgentWS", "WS portfolio error", e)
                 }
             }
         }

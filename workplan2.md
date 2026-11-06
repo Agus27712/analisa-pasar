@@ -5877,3 +5877,60 @@ dipilih owner untuk diperbaiki. Baseline uji bridge sebelum perubahan: **13 test
 - `OmpBridgeInstallerTest` tetap hijau: perintah pemasangan TANPA token tidak berubah
   (kompatibel jalur lama); dengan token, berkas `agent-bridge-token.txt` ditulis ke dua
   direktori.
+
+## 94. Kanal push portofolio untuk agen (2026-11-06)
+
+Latar: setelah §93, sinyal sudah push nyata, tetapi portofolio masih hanya foto
+`GET /portfolio`. `AgentEventBus.portfolio` punya ruang tayang (replay 1) dan
+`AgentOutputBridge.emitPortfolio` sudah menulis berkas + memancarkan, **tetapi tidak ada
+satu pun pemanggil**: `publishPortfolioSnapshot` adalah kode mati, karena tidak ada yang
+memanggilnya. Owner meminta kanal push dibangun.
+
+### 94.1 Pendorong: perubahan isi atau heartbeat, bukan tiap tick
+
+- `AgentPortfolioPusher` (baru, murni & tanpa Android) memisahkan dua keputusan:
+  `signature(snapshot)` = cap isi **tanpa `ts` dan tanpa urutan aset** (dua snapshot
+  sama tidak boleh memicu push palsu), dan `shouldEmit(...)` = kirim bila cap berubah
+  **atau** heartbeat lewat.
+- `EVAL_INTERVAL_MS` = 15 detik (jarak evaluasi, bukan jarak push), `HEARTBEAT_MS` = 5
+  menit (batas agen "buta" walau saldo diam). Harga bergerak tiap detik; mendorong tiap
+  tick hanya membanjiri agen dengan angka hampir sama.
+- `AgentOutputBridge.startPortfolioPush()` — idempoten (`AtomicBoolean`), loop di scope
+  IO bridge, memakai `AgentTradingCommandHandler.buildPortfolioSnapshot(context)` yang
+  **sama** dengan `/portfolio` (tidak ada pembentuk kedua), dan memeriksa
+  `isEnabled()` tiap putaran sehingga sakelar Agent Bridge tetap satu-satunya gerbang.
+- Server menyalakannya tepat setelah state `Running` (`boot`), jadi agen yang baru
+  tersambung tidak perlu menunggu sinyal pertama.
+
+### 94.2 Pengiriman dan konsumsi
+
+- **WebSocket baru `/ws/portfolio`**: mengirim `AgentEventBus.portfolio.replayCache`
+  terakhir segera saat tersambung (snapshot awal), lalu setiap push berikutnya.
+- **SSE `/events`** kini menggabungkan `merge(AgentEventBus.signals,
+  AgentEventBus.portfolio)` dengan label `event: signal` / `event: portfolio` — satu
+  koneksi HTTP cukup untuk keduanya.
+- Ekstensi: `subscribe_portfolio(seconds)` membuka `ws://127.0.0.1:8765/ws/portfolio`,
+  menyimpan cache 50 snapshot, dan mengembalikan snapshot terbaru + daftar pembaruan
+  dalam jendela. Catatan penting di teks hasil bila tidak ada push baru (heartbeat 5
+  menit / isi belum berubah), supaya agen tidak menyimpulkan "bridge mati".
+
+### 94.3 Yang **tidak** diklaim
+
+- Isi snapshot tetap dihitung dari **harga acuan/model** (`resolvePrice` + rata-rata beli
+  tersimpan), bukan rekap fill bursa; ini batas yang sudah dicatat di §93.3. Yang baru
+  adalah **cara sampainya** (push), bukan sumber angkanya.
+- P&L per aset tetap memakai rumus lama; tidak ada perubahan fee.
+
+### 94.4 Uji & kontrol negatif
+
+- `AgentPortfolioPusherTest` 4 uji: cap mengabaikan `ts`/urutan aset, perubahan isi
+  memicu push walau heartbeat belum lewat, isi sama tidak memicu sampai heartbeat, dan
+  perubahan nilai aset mengubah cap.
+- `AgentBridgeServerTest` +2 uji perilaku nyata: SSE `/events` mengirim portofolio
+  berlabel `portfolio` (event bus langsung, penanda unik), dan WebSocket `/ws/portfolio`
+  mengirim snapshot terakhir segera setelah tersambung. Source-scan di `AgentTradingTest`
+  mengunci rantai server → pendorong → ekstensi.
+- Kontrol negatif: (1) `merge(...)` diganti `AgentEventBus.signals.collect` → uji SSE
+  merah; (2) `startPortfolioPush()` dilepas dari `boot` → uji sumber merah; (3) `ts`
+  dimasukkan ke `signature` → `AgentPortfolioPusherTest` merah. Semua dikembalikan
+  setelah dibuktikan merah.

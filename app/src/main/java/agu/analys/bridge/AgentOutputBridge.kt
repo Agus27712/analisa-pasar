@@ -6,6 +6,8 @@ import agu.analys.util.AppLogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,6 +37,9 @@ class AgentOutputBridge(private val context: Context) {
     }
 
     private val latestRef = AtomicReference<AgentSignalOutput?>()
+
+    /** Penjaga agar loop pendorong portofolio tidak berlipat saat server dinyalakan ulang. */
+    private val portfolioPushStarted = java.util.concurrent.atomic.AtomicBoolean(false)
 
 	fun isEnabled(): Boolean {
 		return runCatching {
@@ -94,6 +99,44 @@ class AgentOutputBridge(private val context: Context) {
     }
 
     fun getLatest(): AgentSignalOutput? = latestRef.get()
+
+    /**
+     * Mulai pendorong snapshot portofolio (2026-11-06, idempoten — hanya loop pertama yang
+     * jalan). Dipanggil saat server bridge menyala; loop berhenti sendiri bila sakelar
+     * mati karena setiap putaran memeriksa [isEnabled].
+     *
+     * Kenapa tiap [AgentPortfolioPusher.EVAL_INTERVAL_MS] dan bukan tiap tick harga:
+     * snapshot dibangun dari cache posisi/harga yang sudah diperbarui di tempat lain;
+     * push tiap detik hanya membanjiri agen dengan angka yang hampir sama. Perubahan isi
+     * (atau heartbeat 5 menit) sudah cukup.
+     */
+    fun startPortfolioPush() {
+        if (!portfolioPushStarted.compareAndSet(false, true)) return
+        scope.launch {
+            var previousSignature: String? = null
+            var lastEmitMs = 0L
+            while (isActive) {
+                runCatching {
+                    if (isEnabled()) {
+                        val snapshot = AgentTradingCommandHandler.buildPortfolioSnapshot(context)
+                        if (snapshot != null) {
+                            val signature = AgentPortfolioPusher.signature(snapshot)
+                            val now = System.currentTimeMillis()
+                            if (AgentPortfolioPusher.shouldEmit(previousSignature, signature, now, lastEmitMs)) {
+                                emitPortfolio(snapshot)
+                                previousSignature = signature
+                                lastEmitMs = now
+                            }
+                        }
+                    }
+                }.onFailure { err ->
+                    AppLogManager.error("AgentBridge", "Gagal membangun snapshot portofolio", err)
+                }
+                delay(AgentPortfolioPusher.EVAL_INTERVAL_MS)
+            }
+        }
+        AppLogManager.info("AgentBridge", "Portofolio push dimulai (interval ${AgentPortfolioPusher.EVAL_INTERVAL_MS} ms)")
+    }
 
     fun getDir(): File = outputDir
 
