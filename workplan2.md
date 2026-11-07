@@ -5934,3 +5934,74 @@ memanggilnya. Owner meminta kanal push dibangun.
   merah; (2) `startPortfolioPush()` dilepas dari `boot` → uji sumber merah; (3) `ts`
   dimasukkan ke `signature` → `AgentPortfolioPusherTest` merah. Semua dikembalikan
   setelah dibuktikan merah.
+
+## 95. Detail pair tertukar — siklus `selectPair` di layar detail (2026-11-08)
+
+Latar: owner mengklik pair baru (mis. BTC) di dashboard, tetapi layar detail kadang
+menampilkan pair yang **sebelumnya** dibuka — harga, candle, indikator, dan tombol
+beli/jual semuanya milik pair lama. Gejala tampak acak karena mengulang klik kadang
+"berhasil". Laporan penutup: `docs/laporan_temuan_bugs_detail_pair_tertukar.md`.
+
+### 95.1 Akar masalah: layar menulis balik sumber datanya sendiri
+
+- `DetailChartScreen` dulu memuat
+  `LaunchedEffect(pair.symbol, marketDataSource) { if (pair.symbol.isNotBlank()) viewModel.selectPair(pair) }`.
+- `pair` di layar itu adalah `ui.pair` dari `detailUiState`, dan `detailUiState` dibangun
+  `combine(...)` dari `selectedPair` (`TradingViewModelDetailState.createDetailUiState`).
+  Jadi alurnya melingkar: `selectedPair` → `detailUiState` → `pair` → `selectPair`.
+- Emisi pertama layar **normal** membawa pair lama: `initialValue =
+  DetailUiState.empty()` (`EMPTY_PAIR`, `symbol = ""`), cache `WhileSubscribed(5_000)` saat
+  kembali dari layar lain, dan urutan emisi `combine` yang tiap masukannya
+  di-`throttleLeading(300ms)`. Effect lalu memanggil `selectPair(pairLama)` dan menimpa
+  pilihan baru.
+- Kerusakannya bukan sekadar label salah: `selectPair` menjalankan `engine.resetForOffline()`,
+  `MtfCacheManager.setActiveSymbol`, `loadPairCache`/`clearPairData`, `startMarketPolling`,
+  dan `GlobalContextManager.subscribeCoin` — seluruh state pair baru dibuang lalu pair lama
+  dimuat ulang.
+
+### 95.2 Perbaikan: hapus penulis balik, bukan ditambal pembanding
+
+- Effect itu dihapus dari `DetailChartScreen` dan diganti catatan penjelasan.
+- Semua pintu masuk detail sudah memilih pair **sebelum** navigasi: dashboard
+  (`DashboardScreen.kt:388`, `:513`, `:688`), portofolio, simulasi trade, log sinyal, dan
+  notifikasi (`MainActivity.kt:142`, `:149`, `:169`, `:213`, `:222`) — semuanya lewat
+  `openCoinDetail(pair)` = `selectPair(pair)` lalu `navigateTo(AppScreen.DETAIL)`.
+- Pemakai `AppScreen.DETAIL` hanya `MainActivity.kt:135` (render) dan
+  `TradingViewModelNavigation.kt:22` (navigasi), jadi tidak ada jalur masuk yang melewatkan
+  `selectPair`.
+- **Tidak** ditambal dengan `if (pair.symbol != viewModel.selectedPair.value.symbol)`:
+  pembanding tetap mempertahankan siklus dan menambah penulis balik yang bisa salah lagi.
+- **Tidak** menurunkan `WhileSubscribed(5_000)`/`initialValue`/`throttleLeading(300ms)`:
+  setelah penulis balik hilang, emisi berikutnya selalu membawa `selectedPair` terbaru.
+- **Tidak** mengubah `DashboardScreen` meski `selectPair` terpanggil dua kali (dashboard lalu
+  `openCoinDetail`): redundan dan idempoten pada nilai akhir, bukan penyebab gejala.
+- Efek sah lain di layar detail dipertahankan: `DisposableEffect(pair.baseAsset)` →
+  `GlobalContextManager.subscribeCoin`, `LaunchedEffect(isRealBuyMode, pair.symbol)` →
+  `fetchRealBalance`, `LaunchedEffect(effectivePositionContext.hasPosition, ...)` →
+  `markBought`, `LaunchedEffect(buyCooldownRemainingMs > 0)` → hitung mundur cooldown.
+
+### 95.3 Uji & kontrol negatif
+
+- `DetailPairSourceTest` (baru, `app/src/test/java/agu/analys/ui/screens/`), 3 uji pindai
+  sumber dengan komentar `//` dan `/* */` dibuang lebih dulu:
+  1. `DetailChartScreen.kt` tidak boleh memuat `selectPair(`;
+  2. efek sah wajib tetap ada (`DisposableEffect(pair.baseAsset)`,
+     `GlobalContextManager.subscribeCoin`, `LaunchedEffect(isRealBuyMode, pair.symbol)`) —
+     menjaga agar penghapusan tetap terarah;
+  3. `openCoinDetail` wajib tetap memanggil `selectPair(pair)` **dan** indeks `selectPair`
+     harus lebih kecil dari indeks `navigateTo(AppScreen.DETAIL)`.
+- Uji memindai teks sumber karena `DetailChartScreen` Composable Compose: perilaku effect
+  tidak bisa dijalankan dari JVM tanpa emulator Compose, sedangkan regresinya terbaca di
+  teks sumber.
+- Kontrol negatif (terbukti): blok lama
+  `LaunchedEffect(pair.symbol, marketDataSource) { ... selectPair(pair) }` dikembalikan →
+  pemindaian dengan logika uji yang sama menemukan `selectPair(` → uji **GAGAL**. Blok
+  dibuang lagi → bersih → uji **LULUS**. Eksekusi Gradle sebenarnya diverifikasi lewat
+  GitHub Actions (mesin kerja ini tanpa JDK/Android SDK).
+
+### 95.4 Yang **tidak** diklaim
+
+- Tidak ada uji Compose UI/emulator yang merekam klik dashboard sampai render layar detail;
+  penjaganya pindai sumber, bukan uji perilaku runtime.
+- Ini perbaikan **tampilan pair yang salah**, bukan perubahan strategi: tidak ada gate entry,
+  parameter engine, atau model fee yang disentuh, dan tidak ada klaim profit.

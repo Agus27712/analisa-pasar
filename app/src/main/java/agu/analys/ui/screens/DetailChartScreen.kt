@@ -165,10 +165,10 @@ fun DetailChartScreen(
     val latestIsReal by rememberUpdatedState(isRealBuyMode)
     val latestBids by rememberUpdatedState(orderBookBids)
 
-    // ── 3. Side-effects ──────────────────────────────────────────────────
-    LaunchedEffect(pair.symbol, marketDataSource) {
-        if (pair.symbol.isNotBlank()) viewModel.selectPair(pair)
-    }
+    // NOTE: Removed LaunchedEffect that called selectPair(pair) — it created a circular
+    // dependency with detailUiState (which derives from selectedPair) and caused the detail
+    // screen to revert to the previously opened pair. All entry points (dashboard, portfolio,
+    // notifications) already call openCoinDetail → selectPair before navigation.
 
     DisposableEffect(pair.baseAsset) {
         if (pair.baseAsset.isNotBlank()) {
