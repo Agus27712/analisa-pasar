@@ -10,6 +10,7 @@
  * Format: export default function (pi) — wajib di omp (bukan export const tools).
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 
 type Signal = {
   ts: number;
@@ -246,6 +247,380 @@ function feesFor(exchange: string, quote: string): FeeRates {
   return { buy: 0.002222, sell: 0.004322, quote: q, kind: "IDR" };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Jurnal trade paper (2026-11-07)
+//
+// Setiap trade paper — ditutup watcher maupun SELL manual — dicatat sebagai satu
+// baris JSONL. Tiap baris adalah SNAPSHOT PENUH trade, bukan delta: pembaca cukup
+// mengambil baris terakhir per `tradeId`. Jadi tulisan ganda, crash di tengah, atau
+// baris yang tidak monoton tetap menghasilkan satu state yang konsisten.
+//
+// Kenapa MAE/MFE + σ saat entry ikut dicatat: win-rate saja menyesatkan. Stop 3%
+// "menang 70%" hanya berarti targetnya jarang tersentuh dalam horizon uji; tanpa
+// MAE (seberapa dalam posisi sempat nyungsep) dan σ, angka itu tidak bisa dipakai
+// memutuskan stop yang benar. Lihat tool `paper_trade_journal`.
+// ───────────────────────────────────────────────────────���─────────────────────
+
+const JOURNAL_DIR = `${process.env.HOME || "/data/data/com.termux/files/home"}/storage/shared/analisa-pasar/journal`;
+const JOURNAL_FILE = `${JOURNAL_DIR}/paper_trades.jsonl`;
+/** Cermin `DEFAULT_SLIPPAGE_PCT` app, per sisi. */
+const JOURNAL_SLIPPAGE = 0.0008;
+
+type JournalVol = { sd1mPct: number; atr1mPct: number; sigma60mPct: number };
+type JournalSignal = { action: string; confidence: number; setup: string | null; rvol: number | null };
+
+type PaperTrade = {
+  tradeId: string;
+  symbol: string;
+  quote: string;
+  exchange: string;
+  openedAt: number;
+  closedAt: number | null;
+  entryPrice: number;
+  exitPrice: number | null;
+  quantity: number;
+  costBasis: number;
+  fees: FeeRates;
+  slippagePct: number;
+  buyOrderId?: string;
+  sellOrderId?: string;
+  targetNetPct?: number;
+  stopLossPct?: number;
+  exitReason?: string;
+  pnlQuote?: number | null;
+  pnlPct?: number | null;
+  /** Ekstrem harga sebagai % dari entry (bukan net). */
+  maePct?: number;
+  mfePct?: number;
+  /**
+   * Ekstrem yang sama tapi sudah dikonversi ke % net terhadap basis biaya.
+   * Ini yang dibandingkan dengan `pnlPct` — harga% dan net% berbeda ~0.97%
+   * (biaya round-trip), jadi mencampurnya membuat "left on table" palsu.
+   */
+  maeNetPct?: number;
+  mfeNetPct?: number;
+  ticks?: number;
+  elapsedSec?: number;
+  vol?: JournalVol | null;
+  signal?: JournalSignal | null;
+  /** Alasan entry (dari BUY). */
+  note?: string;
+  /** Alasan exit (dari SELL) — jangan menimpa catatan entry. */
+  exitNote?: string;
+};
+
+function newTradeId(symbol: string): string {
+  const base = symbol.replace(/[^A-Z0-9]/gi, "").slice(0, 12).toUpperCase();
+  return `${Date.now()}-${base}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+async function journalAppend(trade: PaperTrade): Promise<void> {
+  await mkdir(JOURNAL_DIR, { recursive: true });
+  await appendFile(JOURNAL_FILE, `${JSON.stringify(trade)}\n`, "utf8");
+}
+
+/** Semua trade, baris terakhir per `tradeId` menang. Baris rusak diabaikan. */
+async function journalLoad(): Promise<PaperTrade[]> {
+  const raw = await readFile(JOURNAL_FILE, "utf8").catch(() => "");
+  const byId = new Map<string, PaperTrade>();
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const t = JSON.parse(line) as PaperTrade;
+      if (t?.tradeId) byId.set(t.tradeId, t);
+    } catch {
+      /* tulis terpotong: lewati */
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Trade yang masih terbuka untuk pair+exchange tertentu (dipakai SELL manual). */
+async function journalFindOpen(symbol: string, exchange: string): Promise<PaperTrade | undefined> {
+  const parts = splitSymbol(symbol);
+  const ex = exchange.toUpperCase();
+  const all = await journalLoad();
+  return all
+    .filter((t) => t.closedAt == null && t.symbol === parts.display && t.exchange === ex)
+    .sort((a, b) => b.openedAt - a.openedAt)[0];
+}
+
+type JournalStats = {
+  n: number;
+  wins: number;
+  winRatePct: number | null;
+  sumPnl: number;
+  avgPnlPct: number | null;
+  medianPnlPct: number | null;
+  avgMaePct: number | null;
+  avgMfePct: number | null;
+  /** Versi net dari MAE/MFE — sebanding dengan `pnlPct`. */
+  avgMaeNetPct: number | null;
+  avgMfeNetPct: number | null;
+  /** MFE net rata-rata yang tidak pernah tertangkap exit: potensi yang ditinggalkan. */
+  avgLeftOnTablePct: number | null;
+  avgHoldSec: number | null;
+  byExitReason: Record<string, { n: number; avgPnlPct: number | null; sumPnl: number }>;
+  bySymbol: Record<string, { n: number; winRatePct: number | null; avgPnlPct: number | null; sumPnl: number }>;
+};
+
+const meanOf = (xs: number[]): number | null =>
+  xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+
+function medianOf(xs: number[]): number | null {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** Konversi % harga ke % net terhadap basis biaya trade — satuan yang bisa dibandingkan. */
+function netPctAt(trade: PaperTrade, pricePct: number): number | null {
+  if (!(trade.costBasis > 0) || !(trade.entryPrice > 0)) return null;
+  const slip = trade.slippagePct / 100;
+  const gross = trade.quantity * trade.entryPrice * (1 + pricePct / 100);
+  return ((gross * (1 - slip) * (1 - trade.fees.sell) - trade.costBasis) / trade.costBasis) * 100;
+}
+
+/**
+ * Agregat jurnal. `avgLeftOnTablePct` = MFE(net) − realized(net): seberapa jauh
+ * harga sempat melewati harga exit, dalam satuan yang sama dengan PnL. Kalau angka
+ * ini besar dan konsisten, target terlalu jauh atau exit terlalu lambat.
+ */
+
+function journalSummary(trades: PaperTrade[]): JournalStats {
+  const closed = trades.filter((t) => t.closedAt != null && t.pnlPct != null);
+  const pnls = closed.map((t) => t.pnlPct as number);
+  const wins = pnls.filter((p) => p > 0).length;
+  const byExitReason: JournalStats["byExitReason"] = {};
+  const bySymbol: JournalStats["bySymbol"] = {};
+  for (const t of closed) {
+    const reason = t.exitReason ?? "UNKNOWN";
+    const r = (byExitReason[reason] ??= { n: 0, avgPnlPct: null, sumPnl: 0 });
+    r.n += 1;
+    r.sumPnl += t.pnlQuote ?? 0;
+    const sym = (bySymbol[t.symbol] ??= { n: 0, winRatePct: null, avgPnlPct: null, sumPnl: 0 });
+    sym.n += 1;
+    sym.sumPnl += t.pnlQuote ?? 0;
+  }
+  for (const [reason, r] of Object.entries(byExitReason)) {
+    const xs = closed.filter((t) => (t.exitReason ?? "UNKNOWN") === reason).map((t) => t.pnlPct as number);
+    r.avgPnlPct = meanOf(xs);
+  }
+  for (const [sym, r] of Object.entries(bySymbol)) {
+    const xs = closed.filter((t) => t.symbol === sym).map((t) => t.pnlPct as number);
+    r.avgPnlPct = meanOf(xs);
+    r.winRatePct = xs.length ? (xs.filter((p) => p > 0).length / xs.length) * 100 : null;
+  }
+  const left = closed
+    .map((t) => {
+      const mfeNet = t.mfeNetPct ?? (t.mfePct != null ? netPctAt(t, t.mfePct) : null);
+      return mfeNet == null || t.pnlPct == null ? null : mfeNet - t.pnlPct;
+    })
+    .filter((v): v is number => v != null);
+  return {
+    n: closed.length,
+    wins,
+    winRatePct: pnls.length ? (wins / pnls.length) * 100 : null,
+    sumPnl: closed.reduce((a, t) => a + (t.pnlQuote ?? 0), 0),
+    avgPnlPct: meanOf(pnls),
+    medianPnlPct: medianOf(pnls),
+    avgMaePct: meanOf(closed.map((t) => t.maePct).filter((v): v is number => v != null)),
+    avgMfePct: meanOf(closed.map((t) => t.mfePct).filter((v): v is number => v != null)),
+    avgMaeNetPct: meanOf(
+      closed
+        .map((t) => t.maeNetPct ?? (t.maePct != null ? netPctAt(t, t.maePct) : null))
+        .filter((v): v is number => v != null)
+    ),
+    avgMfeNetPct: meanOf(
+      closed
+        .map((t) => t.mfeNetPct ?? (t.mfePct != null ? netPctAt(t, t.mfePct) : null))
+        .filter((v): v is number => v != null)
+    ),
+    avgLeftOnTablePct: meanOf(left),
+    avgHoldSec: meanOf(closed.map((t) => t.elapsedSec).filter((v): v is number => v != null)),
+    byExitReason,
+    bySymbol,
+  };
+}
+
+const KLINES_HOSTS = [
+  "https://www.tokocrypto.site/api/v3/klines",
+  "https://cloudme-toko.2meta.app/api/v1/klines",
+];
+
+/** σ/ATR 1m dari 60 bar terakhir — konteks yang menentukan stop realistis. */
+async function volSnapshot(symbol: string, timeoutMs = 8000): Promise<JournalVol | null> {
+  const { pair } = splitSymbol(symbol);
+  for (const host of KLINES_HOSTS) {
+    try {
+      const res = await fetch(`${host}?symbol=${pair}&interval=1m&limit=60`, {
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const body = (await res.json()) as unknown;
+      if (!Array.isArray(body) || body.length < 20) continue;
+      const rows = body as string[][];
+      const closes = rows.map((c) => Number(c[4])).filter((n) => Number.isFinite(n) && n > 0);
+      if (closes.length < 20) continue;
+      const rets: number[] = [];
+      for (let i = 1; i < closes.length; i++) rets.push(closes[i] / closes[i - 1] - 1);
+      const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+      const varr = rets.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, rets.length - 1);
+      const sd1m = Math.sqrt(varr) * 100;
+      const trs: number[] = [];
+      for (let i = 1; i < closes.length; i++) {
+        const hi = Number(rows[i][2]);
+        const lo = Number(rows[i][3]);
+        trs.push(Math.max(hi - lo, Math.abs(hi - closes[i - 1]), Math.abs(lo - closes[i - 1])));
+      }
+      const atr = trs.reduce((a, b) => a + b, 0) / trs.length;
+      const last = closes[closes.length - 1];
+      return { sd1mPct: sd1m, atr1mPct: (atr / last) * 100, sigma60mPct: sd1m * Math.sqrt(60) };
+    } catch {
+      /* host mati: coba berikutnya */
+    }
+  }
+  return null;
+}
+
+/** Sinyal engine terakhir untuk pair ini, hanya kalau masih segar (<15 menit). */
+function signalContext(symbol: string): JournalSignal | null {
+  const { display } = splitSymbol(symbol);
+  for (let i = lastSignals.length - 1; i >= 0; i--) {
+    const s = lastSignals[i];
+    if (s.symbol !== display) continue;
+    if (Date.now() - s.ts > 15 * 60 * 1000) return null;
+    const tech = (s as Signal & { technical?: Record<string, unknown> }).technical ?? {};
+    const rvol = /RVOL\s*([0-9.]+)x/.exec(s.reason ?? "");
+    return {
+      action: s.action,
+      confidence: s.confidence,
+      setup: typeof tech.scalpingSetup === "string" ? tech.scalpingSetup : null,
+      rvol: rvol ? Number(rvol[1]) : null,
+    };
+  }
+  return null;
+}
+
+/** Konteks jurnal yang ditempelkan ke order (diisi pemanggil, bukan user). */
+type JournalCtx = {
+  targetNetPct?: number;
+  stopLossPct?: number;
+  maePct?: number;
+  mfePct?: number;
+  ticks?: number;
+  elapsedSec?: number;
+  exitReason?: string;
+  tradeId?: string;
+  entryPrice?: number;
+  /** Catatan bebas: dasar entry, setup, alasan keluar. */
+  note?: string;
+};
+
+/**
+ * Catat order paper yang sukses ke jurnal.
+ *
+ * BUY → buat trade baru (`closedAt: null`). SELL → tutup trade terbuka yang cocok,
+ * diidentifikasi lewat `tradeId` kalau pemanggil tahu, kalau tidak lewat pair+exchange.
+ * Tidak pernah melempar: jurnal tidak boleh menggagalkan order yang sudah fill.
+ */
+async function recordPaperTrade(
+  args: OrderArgs,
+  res: OrderResult
+): Promise<{ tradeId?: string; error?: string; note?: string }> {
+  try {
+    const parts = splitSymbol(args.symbol);
+    const fees = feesFor(args.exchange, parts.quote);
+    const slip = JOURNAL_SLIPPAGE;
+    if (args.side === "BUY") {
+      const qty = Number(res.quantity ?? res.executedQty ?? 0);
+      const entry = args.journal?.entryPrice ?? Number(res.price ?? 0);
+      if (!(qty > 0) || !(entry > 0)) {
+        return { note: "qty/harga BUY tidak valid; trade tidak dijurnal" };
+      }
+      const tradeId = newTradeId(parts.display);
+      await journalAppend({
+        tradeId,
+        symbol: parts.display,
+        quote: parts.quote,
+        exchange: args.exchange.toUpperCase(),
+        openedAt: Number(res.timestamp ?? Date.now()),
+        closedAt: null,
+        entryPrice: entry,
+        exitPrice: null,
+        quantity: qty,
+        costBasis: qty * entry * (1 + slip) * (1 + fees.buy),
+        fees,
+        slippagePct: slip * 100,
+        buyOrderId: res.orderId,
+        targetNetPct: args.journal?.targetNetPct,
+        stopLossPct: args.journal?.stopLossPct,
+        note: args.journal?.note,
+        vol: await volSnapshot(args.symbol),
+        signal: signalContext(args.symbol),
+      });
+      return { tradeId };
+    }
+    const open = args.journal?.tradeId
+      ? (await journalLoad()).find((t) => t.tradeId === args.journal?.tradeId)
+      : await journalFindOpen(args.symbol, args.exchange);
+    const qty = Number(res.quantity ?? res.executedQty ?? 0);
+    const exit = Number(res.price ?? 0);
+    if (!open) {
+      return { note: `tidak ada trade ${parts.display} terbuka di jurnal; exit tidak bisa dihitung PnL-nya` };
+    }
+    if (!(qty > 0) || !(exit > 0)) {
+      return { tradeId: open.tradeId, note: "qty/harga SELL tidak valid; trade dibiarkan terbuka" };
+    }
+    // SELL parsial: laba dihitung untuk bagian yang terjual saja, dan sisa posisi
+    // TETAP terbuka sebagai trade baru — kalau ditutup, sisa koin jadi tak terlihat
+    // di jurnal padahal masih dipegang.
+    const sold = Math.min(qty, open.quantity);
+    if (!(sold > 0)) return { tradeId: open.tradeId, note: "qty SELL nol; trade dibiarkan terbuka" };
+    const share = sold / open.quantity;
+    const basis = open.costBasis * share;
+    const netQuote = sold * exit * (1 - slip) * (1 - fees.sell);
+    const pnlQuote = netQuote - basis;
+    const maePct = args.journal?.maePct ?? open.maePct;
+    const mfePct = args.journal?.mfePct ?? open.mfePct;
+    const closedTrade: PaperTrade = { ...open, quantity: sold, costBasis: basis };
+    await journalAppend({
+      ...closedTrade,
+      closedAt: Number(res.timestamp ?? Date.now()),
+      exitPrice: exit,
+      sellOrderId: res.orderId,
+      exitReason: args.journal?.exitReason ?? "MANUAL",
+      pnlQuote,
+      pnlPct: basis > 0 ? (pnlQuote / basis) * 100 : null,
+      maePct,
+      mfePct,
+      maeNetPct: maePct != null ? (netPctAt(closedTrade, maePct) ?? undefined) : undefined,
+      mfeNetPct: mfePct != null ? (netPctAt(closedTrade, mfePct) ?? undefined) : undefined,
+      ticks: args.journal?.ticks ?? open.ticks,
+      elapsedSec: args.journal?.elapsedSec ?? open.elapsedSec,
+      exitNote: args.journal?.note,
+    });
+    const residual = open.quantity - sold;
+    if (residual > 0) {
+      const rest = newTradeId(parts.display);
+      await journalAppend({
+        ...open,
+        tradeId: rest,
+        quantity: residual,
+        costBasis: open.costBasis - basis,
+        note: `${open.note ?? ""} (sisa dari ${open.tradeId}, terjual ${sold})`.trim(),
+      });
+      return {
+        tradeId: open.tradeId,
+        note: `SELL parsial ${sold}/${open.quantity}; sisa ${residual} dilanjutkan sebagai ${rest}`,
+      };
+    }
+    return { tradeId: open.tradeId };
+  } catch (e) {
+    return { error: `jurnal gagal ditulis: ${e}` };
+  }
+}
+
 const priceHostCache = new Map<string, string>();
 
 /**
@@ -285,6 +660,10 @@ type OrderResult = {
   executedQty?: number;
   isSimulation?: boolean;
   symbol?: string;
+  /** Epoch ms dari bridge saat order dieksekusi. */
+  timestamp?: number;
+  /** Hasil penulisan jurnal untuk order paper; kosong untuk akun riil. */
+  journal?: { tradeId?: string; error?: string; note?: string };
 };
 
 type OrderArgs = {
@@ -297,8 +676,9 @@ type OrderArgs = {
   autoLimitTp2?: number;
   isSimulation: boolean;
   exchange: string;
+  /** Metadata jurnal; TIDAK dikirim ke bridge (body disusun eksplisit di placeOrder). */
+  journal?: JournalCtx;
 };
-
 /**
  * Kirim order ke bridge.
  *
@@ -331,7 +711,10 @@ async function placeOrder(args: OrderArgs, timeoutMs = 25000): Promise<OrderResu
     if (res.status === 401) {
       return { success: false, message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN). Jalankan ulang pemasangan ekstensi dari Pengaturan app.` };
     }
-    return (await res.json()) as OrderResult;
+    const data = (await res.json()) as OrderResult;
+    // Paper-only, best-effort: jurnal tidak boleh menggagalkan order yang sudah fill.
+    if (data.success && args.isSimulation) data.journal = await recordPaperTrade(args, data);
+    return data;
   } catch (e) {
     return { success: false, message: `Gagal kirim order ${args.side}: ${e}` };
   }
@@ -355,6 +738,8 @@ type WatchOpts = {
   onTick?: (tick: { elapsedSec: number; price: number; pnlPct: number; targetPrice: number; stopPrice: number | null }) => void;
   /** Batalkan pemantauan (posisi dibiarkan terbuka, hasil `status: "open"`). */
   signal?: AbortSignal;
+  /** Trade terbuka di jurnal yang mau ditutup; kosong = cari otomatis per pair. */
+  tradeId?: string;
 };
 
 type WatchResult = {
@@ -371,8 +756,15 @@ type WatchResult = {
   lastPrice: number | null;
   lastPnlPct: number | null;
   priceSource: string | null;
+  /** Drawdown maksimum dari harga entry (negatif), dalam %. */
+  maePct: number;
+  /** Kenaikan maksimum dari harga entry (positif), dalam %. */
+  mfePct: number;
   sell?: OrderResult;
   realized?: { netQuote: number; pnl: number; pnlPct: number; exitPrice: number };
+  /** tradeId jurnal yang tercatat saat penutupan; kosong kalau tidak ada yang cocok. */
+  tradeId?: string | null;
+  journalError?: string;
   message: string;
 };
 
@@ -401,9 +793,18 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
   const pollMs = Math.max(2000, opts.pollMs ?? 15000);
   const maxWaitMs = Math.max(5000, (opts.maxWaitSec ?? 180) * 1000);
 
-  let qty = opts.quantity;
-  const entryPrice = opts.entryPrice;
-  const costBasis = qty * entryPrice * (1 + slip) * (1 + fees.buy);
+  // Lanjutan pemantauan: kalau trade ini sudah ada di jurnal, pakai angka jurnal
+  // (qty, entry, basis, MAE/MFE) supaya PnL yang dilaporkan identik dengan yang
+  // tercatat, bukan hasil hitung ulang dari parameter panggilan.
+  const openTrade = opts.isSimulation
+    ? opts.tradeId
+      ? (await journalLoad()).find((t) => t.tradeId === opts.tradeId)
+      : await journalFindOpen(opts.symbol, opts.exchange)
+    : undefined;
+  const entryPrice = openTrade?.entryPrice ?? opts.entryPrice;
+  let qty = openTrade?.quantity ?? opts.quantity;
+  const costBasis =
+    openTrade?.costBasis ?? qty * entryPrice * (1 + slip) * (1 + fees.buy);
   const netPerUnitAt = (px: number) => px * (1 - slip) * (1 - fees.sell);
   const priceForNet = (net: number) => net / (qty * (1 - slip) * (1 - fees.sell));
   const targetPrice = priceForNet(costBasis * (1 + targetPct / 100));
@@ -418,7 +819,15 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
   let lastPnlPct: number | null = null;
   let lastSource: string | null = null;
   let missStreak = 0;
-
+  // MAE/MFE atas HARGA entry: bahan riset exit timing (target terlalu jauh? stop
+  // terlalu lebar?), dan tidak bisa direkonstruksi setelah posisi ditutup. Nilai
+  // awal diambil dari jurnal supaya panggilan lanjutan tidak mereset ekstrem.
+  let maxPrice = entryPrice * (1 + (openTrade?.mfePct ?? 0) / 100);
+  let minPrice = entryPrice * (1 + (openTrade?.maePct ?? 0) / 100);
+  const excursion = () => ({
+    maePct: (minPrice / entryPrice - 1) * 100,
+    mfePct: (maxPrice / entryPrice - 1) * 100,
+  });
   const { promise: aborted, resolve: onAbort } = Promise.withResolvers<void>();
   if (opts.signal?.aborted) onAbort();
   else opts.signal?.addEventListener("abort", onAbort, { once: true });
@@ -428,7 +837,7 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
   const snapshot = () => ({
     symbol: parts.display, quantity: qty, entryPrice, costBasis, fees,
     targetPrice, stopPrice, ticks, elapsedSec: elapsedSec(),
-    lastPrice, lastPnlPct, priceSource: lastSource,
+    lastPrice, lastPnlPct, priceSource: lastSource, ...excursion(),
   });
 
   while (Date.now() - t0 < maxWaitMs && !opts.signal?.aborted) {
@@ -448,6 +857,8 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
     ticks += 1;
     lastPrice = q.price;
     lastSource = q.source;
+    if (q.price > maxPrice) maxPrice = q.price;
+    if (q.price < minPrice) minPrice = q.price;
     const pnlPct = ((qty * netPerUnitAt(q.price) - costBasis) / costBasis) * 100;
     lastPnlPct = pnlPct;
     opts.onTick?.({ elapsedSec: elapsedSec(), price: q.price, pnlPct, targetPrice, stopPrice });
@@ -464,6 +875,10 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
         sell = await placeOrder({
           side: "SELL", symbol: parts.display, quantity: qty, price: fresh,
           isSimulation: opts.isSimulation, exchange: opts.exchange,
+          journal: {
+            exitReason: reason, maePct: excursion().maePct, mfePct: excursion().mfePct,
+            ticks, elapsedSec: elapsedSec(), tradeId: openTrade?.tradeId ?? opts.tradeId,
+          },
         });
         if (sell.success) break;
         const available = availableFromMessage(sell.message);
@@ -488,6 +903,8 @@ async function watchPosition(opts: WatchOpts): Promise<WatchResult> {
         status: "closed",
         sell,
         realized: { netQuote, pnl, pnlPct: pnlPctRealized, exitPrice: exitRaw },
+        tradeId: sell.journal?.tradeId ?? openTrade?.tradeId ?? null,
+        journalError: sell.journal?.error,
         message: `${reason} tercapai (${pnlPct.toFixed(3)}% net @ ${q.price}) → SELL ${sell.status ?? ""} @ ${exitRaw} → PnL ${pnl.toFixed(5)} ${fees.quote} (${pnlPctRealized.toFixed(3)}%)`,
       };
     }
@@ -735,6 +1152,9 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       autoLimitTp2: z.number().optional().describe("Harga Take Profit 2 opsional"),
       isSimulation: z.boolean().optional().default(false).describe("True untuk simulasi paper trading, False untuk akun riil"),
       exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+      targetNetPct: z.number().optional().describe("Target profit net (%) — dicatat di jurnal untuk riset"),
+      stopLossPct: z.number().optional().describe("Cut loss (%) — dicatat di jurnal untuk riset"),
+      note: z.string().optional().describe("Alasan/dasar entry; disimpan di jurnal"),
     }),
     async execute(_toolCallId, params) {
       const price = params.price && params.price > 0 ? params.price : (await fetchPrice(params.symbol))?.price;
@@ -748,6 +1168,11 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         autoLimitTp2: params.autoLimitTp2,
         isSimulation: params.isSimulation ?? false,
         exchange: params.exchange ?? "TOKOCRYPTO",
+        journal: {
+          targetNetPct: params.targetNetPct,
+          stopLossPct: params.stopLossPct,
+          note: params.note,
+        },
       });
       return textResult(data);
     },
@@ -764,6 +1189,10 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       price: z.number().optional().describe("Harga acuan; kosong = ticker Tokocrypto terbaru (bukan cache app)"),
       isSimulation: z.boolean().optional().default(false).describe("True untuk simulasi paper trading, False untuk akun riil"),
       exchange: z.string().optional().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+      tradeId: z.string().optional().describe("tradeId jurnal yang ditutup; kosong = cari otomatis trade terbuka pair ini"),
+      exitReason: z.enum(["TARGET", "STOPLOSS", "MANUAL", "TIMEOUT", "ERROR"]).optional()
+        .describe("Alasan keluar; disimpan di jurnal"),
+      note: z.string().optional().describe("Catatan tambahan untuk jurnal"),
     }),
     async execute(_toolCallId, params) {
       const price = params.price && params.price > 0 ? params.price : (await fetchPrice(params.symbol))?.price;
@@ -774,6 +1203,11 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         price,
         isSimulation: params.isSimulation ?? false,
         exchange: params.exchange ?? "TOKOCRYPTO",
+        journal: {
+          tradeId: params.tradeId,
+          exitReason: params.exitReason ?? "MANUAL",
+          note: params.note,
+        },
       });
       return textResult(data);
     },
@@ -848,6 +1282,45 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerTool({
+    name: "paper_trade_journal",
+    label: "Paper trade journal",
+    description:
+      "Baca jurnal trade paper (JSONL) dan kembalikan trade + agregat riset: win rate, rata-rata/median PnL, " +
+      "MAE/MFE, dan left-on-table (MFE − PnL) untuk menilai apakah target/stop terlalu jauh. " +
+      "Filter opsional: symbol, exitReason, sinceTs, hanya yang sudah ditutup (default).",
+    parameters: z.object({
+      symbol: z.string().optional().describe("Filter pair, contoh: BTCUSDT (kosong = semua)"),
+      exitReason: z.string().optional().describe("Filter alasan keluar, contoh: TARGET / STOPLOSS / MANUAL"),
+      sinceTs: z.number().optional().describe("Hanya trade yang dibuka setelah epoch ms ini"),
+      includeOpen: z.boolean().default(false).describe("Ikutkan trade yang belum ditutup"),
+      limit: z.number().min(1).max(1000).default(100).describe("Maksimum trade yang dikembalikan (terbaru dulu)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const all = await journalLoad();
+        const display = params.symbol ? splitSymbol(params.symbol).display : null;
+        const filtered = all.filter((t) => {
+          if (display && t.symbol !== display) return false;
+          if (params.exitReason && t.exitReason !== params.exitReason) return false;
+          if (params.sinceTs != null && t.openedAt < params.sinceTs) return false;
+          if (!params.includeOpen && t.closedAt == null) return false;
+          return true;
+        });
+        const shown = filtered.sort((a, b) => b.openedAt - a.openedAt).slice(0, params.limit);
+        return textResult({
+          path: JOURNAL_FILE,
+          totalRecords: all.length,
+          matched: filtered.length,
+          summary: journalSummary(filtered),
+          trades: shown,
+        });
+      } catch (e) {
+        return textResult({ error: `Gagal baca jurnal: ${e}` });
+      }
+    },
+  });
+
   const tickUpdate = (symbol: string, targetNetPct: number) => (t: { price: number; pnlPct: number; targetPrice: number }) => ({
     content: [
       {
@@ -866,30 +1339,41 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       "quantity/entryPrice yang sama ke panggilan berikutnya untuk melanjutkan.",
     parameters: z.object({
       symbol: z.string().describe("Simbol pair, contoh: BTCUSDT, ETHUSDT, BTCIDR"),
-      quantity: z.number().positive().describe("Kuantitas koin yang dipegang (dari hasil place_buy_order)"),
+      quantity: z.number().positive().optional().describe("Kuantitas koin (dari hasil place_buy_order); kosong = pakai trade terbuka di jurnal"),
       entryPrice: z
         .number()
         .positive()
         .optional()
-        .describe("Harga pasar mentah saat entry; kalau kosong dipakai harga pasar sekarang"),
+        .describe("Harga pasar mentah saat entry; kosong = jurnal, lalu harga pasar sekarang"),
       targetNetPct: z.number().default(0.33).describe("Target profit net (%) setelah fee + slippage"),
-      stopLossPct: z.number().optional().describe("Cut loss otomatis dalam % net; kosong = tanpa stop"),
+      stopLossPct: z.number().optional().describe("Cut loss otomatis dalam % harga entry; kosong = tanpa stop"),
       pollMs: z.number().min(2000).default(15000).describe("Jarak antar cek harga (ms)"),
       maxWaitSec: z.number().min(5).max(600).default(170).describe("Batas waktu satu panggilan (detik)"),
       isSimulation: z.boolean().default(true).describe("True untuk paper trading"),
       exchange: z.string().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+      tradeId: z.string().optional().describe("tradeId jurnal yang dipantau; kosong = trade terbuka terbaru pair ini"),
     }),
     async execute(_toolCallId, params, signal, onUpdate) {
-      const entryPrice = params.entryPrice ?? (await fetchPrice(params.symbol))?.price;
-      if (!entryPrice) {
+      const journalTrade = params.isSimulation
+        ? params.tradeId
+          ? (await journalLoad()).find((t) => t.tradeId === params.tradeId)
+          : await journalFindOpen(params.symbol, params.exchange)
+        : undefined;
+      const entryPrice =
+        params.entryPrice ?? journalTrade?.entryPrice ?? (await fetchPrice(params.symbol))?.price;
+      const quantity = params.quantity ?? journalTrade?.quantity;
+      if (!entryPrice || !quantity) {
         return textResult({
           status: "error",
-          message: `Harga ${params.symbol} tidak tersedia dan entryPrice tidak diisi; posisi TIDAK dipantau.`,
+          message: `Entry tidak lengkap untuk ${params.symbol}: ${
+            entryPrice ? "" : "harga tidak tersedia "
+          }${quantity ? "" : "quantity tidak diisi dan tidak ada trade terbuka di jurnal "}` +
+            "; posisi TIDAK dipantau.",
         });
       }
       const result = await watchPosition({
         symbol: params.symbol,
-        quantity: params.quantity,
+        quantity,
         entryPrice,
         targetNetPct: params.targetNetPct,
         stopLossPct: params.stopLossPct,
@@ -897,6 +1381,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         maxWaitSec: params.maxWaitSec,
         isSimulation: params.isSimulation,
         exchange: params.exchange,
+        tradeId: journalTrade?.tradeId,
         signal,
         onTick: (t) => onUpdate?.(tickUpdate(params.symbol, params.targetNetPct)(t)),
       });
@@ -914,11 +1399,12 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       symbol: z.string().describe("Simbol pair, contoh: BTCUSDT, ETHUSDT, BTCIDR"),
       quoteAmount: z.number().positive().describe("Nominal beli dalam quote currency (mis. 6 USDT / 100000 IDR)"),
       targetNetPct: z.number().default(0.33).describe("Target profit net (%) setelah fee + slippage"),
-      stopLossPct: z.number().optional().describe("Cut loss otomatis dalam % net; kosong = tanpa stop"),
+      stopLossPct: z.number().optional().describe("Cut loss otomatis dalam % harga entry; kosong = tanpa stop"),
       pollMs: z.number().min(2000).default(15000).describe("Jarak antar cek harga (ms)"),
       maxWaitSec: z.number().min(5).max(600).default(170).describe("Batas waktu satu panggilan (detik)"),
       isSimulation: z.boolean().default(true).describe("True untuk paper trading"),
       exchange: z.string().default("TOKOCRYPTO").describe("Bursa target (default: TOKOCRYPTO)"),
+      note: z.string().optional().describe("Alasan/dasar entry; disimpan di jurnal"),
     }),
     async execute(_toolCallId, params, signal, onUpdate) {
       const buy = await placeOrder({
@@ -928,6 +1414,11 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         price: (await fetchPrice(params.symbol))?.price,
         isSimulation: params.isSimulation,
         exchange: params.exchange,
+        journal: {
+          targetNetPct: params.targetNetPct,
+          stopLossPct: params.stopLossPct,
+          note: params.note,
+        },
       });
       if (!buy.success) return textResult({ stage: "buy", buy });
       const quantity = Number(buy.quantity ?? buy.executedQty ?? 0);
@@ -949,6 +1440,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         maxWaitSec: params.maxWaitSec,
         isSimulation: params.isSimulation,
         exchange: params.exchange,
+        tradeId: buy.journal?.tradeId,
         signal,
         onTick: (t) => onUpdate?.(tickUpdate(params.symbol, params.targetNetPct)(t)),
       });
