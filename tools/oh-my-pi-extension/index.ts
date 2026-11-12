@@ -1084,6 +1084,38 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
+    name: "get_engine_analysis",
+    label: "Engine multi-strategy analysis",
+    description:
+      "Analisis mendalam dari 3 engine aplikasi (scalping, intraday, swing) + indikator teknikal " +
+      "komprehensif (RSI, MACD, EMA20/50/200, ATR, RVOL, VWAP, Bollinger Bands) dan konfluensi arah " +
+      "untuk pair tertentu. Dihitung oleh engine aplikasi, bukan oleh ekstensi ini.",
+    parameters: z.object({
+      symbol: z.string().describe("Pair, contoh: BTCUSDT atau BTCIDR"),
+      exchange: z.string().optional().describe("Bursa: TOKOCRYPTO atau INDODAX; kosong = bursa aktif di aplikasi"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const q = new URLSearchParams({ symbol: params.symbol || "" });
+        if (params.exchange) q.set("exchange", params.exchange);
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/engine/analysis?${q.toString()}`, {
+          signal: AbortSignal.timeout(30000),
+        });
+        const body = await res.text();
+        if (!res.ok) {
+          return textResult({ ok: false, status: res.status, body });
+        }
+        return textResult(JSON.parse(body));
+      } catch (e) {
+        return textResult({
+          ok: false,
+          error: `Gagal membaca analisis engine dari bridge: ${e}. Pastikan sakelar Agent Bridge di aplikasi menyala.`,
+        });
+      }
+    },
+  });
+
+  pi.registerTool({
     name: "write_research_log",
     label: "Write research log",
     description: "Tulis log riset Markdown (bukan eksekusi order)",

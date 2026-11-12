@@ -6005,3 +6005,110 @@ beli/jual semuanya milik pair lama. Gejala tampak acak karena mengulang klik kad
   penjaganya pindai sumber, bukan uji perilaku runtime.
 - Ini perbaikan **tampilan pair yang salah**, bukan perubahan strategi: tidak ada gate entry,
   parameter engine, atau model fee yang disentuh, dan tidak ada klaim profit.
+
+---
+
+## 96. Port fitur "engine analysis" dari repo `agentfeed` (2026-11-12)
+
+Latar: owner meminta cherry-pick fitur dari repo
+`https://github.com/Aguswers12/agentfeed/tree/main/tools` dan menerapkannya ke repo lokal.
+Repo itu **repo saudara** (package `agu.analys` sama, bukan fork repo ini). Catatan nama: URL
+yang ditulis owner `Aguswers12`; nama sebenarnya **`Agus27712`** (pemilik repo ini juga) —
+`git ls-remote` ke `Aguswers12` menjawab "Repository not found".
+
+Fitur yang dimaksud ada di commit **`51f9c39` — "feat: add engine analysis support"**
+(2026-11-12 11:21), commit terakhir repo itu.
+
+### 96.1 Isi fitur di repo asal
+
+| Bagian | Isi |
+|---|---|
+| Rute | `GET /api/v1/engine/analysis?symbol=` + alias `GET /api/v1/market/analysis?symbol=` |
+| DTO | `AgentEngineAnalysis`, `AgentScalpingAnalysis`, `AgentIntradayAnalysis`, `AgentSwingAnalysis`, `AgentTechnicalIndicators`, `AgentCheckpoint` |
+| Provider | `AgentMarketDataProvider.engineAnalysis(ctx, symbol)` — tarik ticker + candle H1/H4/D1/M15/M5/M1 + order book dari Tokocrypto, evaluasi tiga mode lewat `ModeSignalEvaluator`, hitung bias gabungan |
+| Alat OMP | tool `get_engine_analysis` |
+| Smoke | stub fixture + assertion rute |
+
+### 96.2 Yang **tidak** dipindah, dan alasannya
+
+- **Seluruh `AgentMarketDataProvider`** (market context, ticker, klines, depth, symbols,
+  capabilities, time). Repo lokal **tidak punya** endpoint `/api/v1/market/*` sama sekali —
+  bridge lokal fokus sinyal/portofolio/trading. Yang dipindah hanya bagian engine analysis.
+- **`DetailCoinScreen` (933 baris) + navigasi + ikon launcher + konfigurasi signing Gradle.**
+  Itu milik aplikasi "nadi agentfeed" yang terpisah, bukan fitur bridge. Repo lokal sudah punya
+  `DetailCoinScreen` sendiri (commit `d27ff59`).
+- **`FeeSchedule.configFor` dipakai langsung.** Repo lokal **wajib**
+  `AppPreferences.feeConfigFor(symbol, exchange)` (aturan FEE_TRUTH): tarif kustom user ikut,
+  dan pair IDR tidak salah dinilai dengan tarif USDT.
+
+### 96.3 Penyesuaian ke repo lokal
+
+| Asal | Lokal | Alasan |
+|---|---|---|
+| `FeeSchedule.configFor("TOKOCRYPTO", quote)` | `AppPreferences.feeConfigFor(symbol, exchange)` | tarif kustom user + benar-benar mengikuti kuotasi pair |
+| Hanya Tokocrypto | `exchange` opsional (`TOKOCRYPTO`/`INDODAX`), default = bursa aktif pengguna | repo lokal melayani dua bursa; Indodax hanya IDR dan pair lain **ditolak** (aturan "Batasan pasar") |
+| DTO di `AgentMarketModels.kt` | berkas baru `AgentEngineAnalysisModels.kt` | repo lokal tidak punya `AgentMarketModels.kt`; berkas baru ini murni Kotlin + serialization sehingga bisa ikut di-copy ke smoke |
+| Pemetaan inline di provider | `AgentEngineAnalysisMapper` (fungsi murni) | bisa diuji tanpa Android/jaringan; bridge tidak menghitung ulang skor/R:R |
+| `ModeSignalEvaluator.evaluate(...)` | sama | **satu-satunya** pemetaan `StrategyMode → evaluator` (aturan N6/N17) — tidak dirakit ulang di bridge |
+| `catch (Exception)` | `Throwable` + `CancellationException` diteruskan | pembatalan koroutine tidak boleh ditelan |
+| `AppPreferences` dibangun per permintaan | satu instance per proses (`prefsCache`) | membuat `EncryptedSharedPreferences` + `MasterKey` itu mahal; aturan "AppPreferences tidak boleh dibangun di jalur per-tick" |
+
+### 96.4 Yang ditambahkan di repo lokal
+
+- `app/src/main/java/agu/analys/bridge/AgentEngineAnalysisModels.kt` — DTO (6 data class).
+- `app/src/main/java/agu/analys/bridge/AgentEngineAnalysisMapper.kt` — pemetaan murni
+  (normalisasi simbol, bias gabungan, indikator, tiga mode).
+- `app/src/main/java/agu/analys/bridge/AgentEngineAnalysisProvider.kt` — tarik data bursa,
+  evaluasi tiga mode, susun DTO.
+- `AgentHttpServer.kt` — dua rute baca **publik tanpa token** (hanya data pasar + hasil mesin),
+  dan halaman `/` mencantumkan rute barunya.
+- `tools/oh-my-pi-extension/index.ts` — tool `get_engine_analysis`.
+- `tools/bridge-smoke/` — stub provider + assertion rute + DTO ikut disalin apa adanya.
+- `app/src/test/java/agu/analys/bridge/AgentEngineAnalysisTest.kt` — 10 uji.
+
+### 96.5 Temuan sampingan: smoke bridge sudah merah sejak 6 Nov
+
+Proyek `tools/bridge-smoke` **tidak bisa dikompilasi** sejak perubahan bridge tanggal 2026-11-06
+(token endpoint tulis + `TechnicalBreakdown`): stub `ScalpingMtfSnapshot` dan `AppPreferences`
+hilang, `AgentTradingModels.kt` tidak ikut disalin, dan `AgentTradingCommandHandler` tidak
+di-stub. Akibatnya job `bridge-smoke` di Actions merah dan verifikasi bridge mati tanpa
+disadari. Diperbaiki pada sesi ini (laporan lengkap:
+`docs/laporan_temuan_bugs_smoke_bridge.md`).
+
+### 96.6 Bukti
+
+- **Seluruh unit test aplikasi** (lokal, `./gradlew :app:testDebugUnitTest`): **953 uji · 13 gagal ·
+  5 dilewati** (137 kelas). Ke-13 kegagalan itu **basi** — `data/tokocrypto_v7` sudah dihapus
+  (perapp #30 di `docs/PANDUAN-LANJUT-AGEN.md`): `IntradayAccountingAndSessionTest` (4),
+  `IntradayReplayWindowAccountingTest` (3), `IntradayGeometryAndMacdHistTest` (6). Tidak ada
+  kegagalan baru dari port ini. Angka diukur dari `app/build/test-results/testDebugUnitTest/*.xml`.
+- **Unit test area bridge** (lokal, `./gradlew :app:testDebugUnitTest --tests "agu.analys.bridge.*"`):
+  **42 uji · 0 gagal · 0 dilewati** (7 kelas). Yang baru: `AgentEngineAnalysisTest` (10 uji) +
+  1 uji rute di `AgentBridgeServerTest` ("rute analisis engine terdaftar dan menolak simbol tak
+  dikenal"). Angka diukur dari `app/build/test-results/testDebugUnitTest/*.xml`, bukan dari ingatan.
+- **Smoke** (lokal, `cd tools/bridge-smoke && gradle run`): **PASS**, termasuk assertion rute
+  analisis engine baru.
+- **Kontrol negatif (keduanya terbukti gagal):**
+  1. rute `/api/v1/engine/analysis` di `AgentHttpServer.kt` diganti isi tetap
+     `{"available":false}` ⇒ **smoke GAGAL** (`IllegalStateException: Check failed`); dikembalikan
+     ⇒ smoke PASS lagi;
+  2. `AgentEngineAnalysisMapper.overallBias` ditukar (`LEAN_BULLISH` ⇄ `LEAN_BEARISH`) ⇒
+     `AgentEngineAnalysisTest` GAGAL (1 dari 10); dikembalikan ⇒ hijau lagi.
+  Selain itu, uji pertama yang dibuat **menangkap bug nyata di kode sendiri**: `BNBIDR` dinormalisasi
+  jadi `BNIDR` (pemangkiran sufiks `BIDR` memakan huruf B). Perbaikan: normalisasi memakai
+  `TokocryptoMarketService.toTokocryptoSymbol` — satu definisi simbol milik aplikasi, bukan aturan
+  kedua.
+- **TypeScript ekstensi:** `tsc --noEmit` atas `tools/oh-my-pi-extension/index.ts` → **0 error
+  sintaks** (TS1xxx). Sisanya error lama akibat stub tipe SDK (`@oh-my-pi/pi-coding-agent`,
+  `@types/node`, tipe Bun) — jumlah kategori error **tidak berubah** dibanding berkas sebelum
+  perubahan; yang bertambah hanya 2 `TS7006` untuk parameter `_toolCallId`/`params` — pola
+  yang sama dengan 30 tool lain di berkas itu.
+
+### 96.7 Yang **tidak** diklaim
+
+- Analisis engine ini **bukan** sinyal baru dan **bukan** edge baru. Ia hanya membuka angka yang
+  sudah ada di dalam engine agar agen tidak perlu menebak.
+- Angka yang dikirim adalah hasil evaluasi engine pada **saat permintaan** — sama seperti
+  sinyal di UI, bukan angka historis yang bisa dipakai sebagai bukti edge.
+- Tidak ada perubahan pada gate entry, parameter engine, slider, atau model fee.
+- `GET /api/v1/market/analysis` adalah alias, bukan dua hitungan berbeda.

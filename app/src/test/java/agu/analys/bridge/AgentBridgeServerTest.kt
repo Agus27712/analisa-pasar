@@ -135,6 +135,35 @@ class AgentBridgeServerTest {
     }
 
     /**
+     * Rute analisis engine (2026-11-12) wajib terdaftar dan menjawab dengan JSON yang benar.
+     *
+     * Simbol yang dipakai **sengaja tidak dikenal** (`BTCEUR`) supaya jalur keluar paling awal
+     * provider yang dipakai — **tanpa jaringan dan tanpa preferensi terenkripsi** — sehingga
+     * uji ini tetap deterministik di Robolectric. Yang dijaga: rute ada (bukan 404), bentuk
+     * JSON benar, dan kegagalan dijelaskan (`available:false` + `error`), bukan diam-diam
+     * mengembalikan angka kosong.
+     */
+    @Test
+    fun `rute analisis engine terdaftar dan menolak simbol tak dikenal`() {
+        runBlocking {
+            server.start()
+            assertTrue(server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+
+            val (code, body) = httpGet("/api/v1/engine/analysis?symbol=BTCEUR")
+            assertEquals(200, code)
+            assertTrue("badan analisis: $body", body.contains("\"available\":false"))
+            assertTrue("badan analisis: $body", body.contains("tidak dikenali"))
+
+            val (aliasCode, aliasBody) = httpGet("/api/v1/market/analysis?symbol=BTCEUR")
+            assertEquals(200, aliasCode)
+            assertTrue("badan alias analisis: $aliasBody", aliasBody.contains("\"available\":false"))
+
+            server.stop()
+            server.awaitSettled(10_000)
+        }
+    }
+
+    /**
      * Push portofolio ke SSE (2026-11-06): `/events` dulu hanya mengoleksi sinyal,
      * sehingga `AgentEventBus.portfolio` yang punya produsen pun tidak pernah sampai
      * ke client HTTP streaming. Uji ini memakai event bus langsung (tanpa prefs/singleton

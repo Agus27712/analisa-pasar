@@ -234,6 +234,7 @@ class AgentHttpServer(private val context: Context) {
                       "status":"ok",
                       "service":"analisa-pasar-agent-bridge-v3",
                       "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health"],
+                      "analysis": ["/api/v1/engine/analysis?symbol=BTCUSDT","/api/v1/market/analysis?symbol=BTCUSDT"],
                       "trading": ["POST /api/v1/trading/buy","POST /api/v1/trading/sell","POST /api/v1/trading/cancel","GET /api/v1/trading/orders/{id}"],
                       "trading_auth": "Semua rute /api/v1/trading/* menuntut header X-Agent-Token (berkas token diinstal bersama ekstensi OMP).",
                       "push": ["/ws/signals (WebSocket)", "/ws/portfolio (WebSocket)", "/events (SSE: signal + portfolio)"]
@@ -282,6 +283,23 @@ class AgentHttpServer(private val context: Context) {
                         call.respondText("""{"error":"no portfolio"}""", ContentType.Application.Json, HttpStatusCode.NotFound)
                     }
                 }
+            }
+
+            // --- ANALISIS ENGINE MULTI-MODE (scalping/intraday/swing) ---
+            // Rute baca publik: hanya data pasar & hasil mesin, tidak ada state order.
+            // `exchange` opsional (TOKOCRYPTO / INDODAX); kosong = bursa aktif pengguna.
+            get("/api/v1/engine/analysis") {
+                val symbol = call.request.queryParameters["symbol"].orEmpty()
+                val exchange = call.request.queryParameters["exchange"]
+                val analysis = AgentEngineAnalysisProvider.engineAnalysis(context, symbol, exchange)
+                call.respondText(json.encodeToString(analysis), ContentType.Application.Json)
+            }
+            // Alias: nama yang lebih umum dipakai agen untuk "analisis pasar".
+            get("/api/v1/market/analysis") {
+                val symbol = call.request.queryParameters["symbol"].orEmpty()
+                val exchange = call.request.queryParameters["exchange"]
+                val analysis = AgentEngineAnalysisProvider.engineAnalysis(context, symbol, exchange)
+                call.respondText(json.encodeToString(analysis), ContentType.Application.Json)
             }
 
             // --- AGENT-ASSISTED TRADING ENDPOINTS (V3) ---

@@ -17,6 +17,13 @@ Tokocrypto/Indodax **K1–K15** (daftar pair resmi, WebSocket Indodax hidup, rec
 status live per bursa, lingkup ticker watchlist, gate watchlist & dashboard). Tag rilis
 dibuat **manual** lewat Actions → `Release APK` (`workflow_dispatch`), tidak otomatis saat push.
 
+**Belum dirilis (pohon kerja, 2026-11-12):** port fitur *engine analysis* dari repo saudara
+`Agus27712/agentfeed` (commit `51f9c39`) — rute baca publik
+`GET /api/v1/engine/analysis?symbol=` (alias `/api/v1/market/analysis`) yang mengembalikan
+analisis tiga engine (scalping/intraday/swing) + indikator teknikal, plus tool OMP
+`get_engine_analysis`. Angka keluar apa adanya dari engine; **bukan** sinyal atau edge baru.
+Rincian + bukti: `workplan2.md` §96. Versi **belum** dinaikkan (rilis manual atas permintaan owner).
+
 ---
 
 ## ▶ MULAI DARI SINI (agen lanjutan — baca sebelum menyentuh kode)

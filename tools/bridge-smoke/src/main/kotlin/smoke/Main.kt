@@ -42,10 +42,13 @@ fun main() {
         server.start()
         awaitHealth()
         check(server.isRunning)
-        check(get("/").contains("agent-bridge-v2"))
+        check(get("/").contains("analisa-pasar-agent-bridge-v3"))
         check(get("/signals/latest").contains("latest"))
         check(get("/portfolio").contains("portfolio"))
         check(get("/signals/history?limit=1") == "[{\"id\":2}]")
+        check(get("/api/v1/engine/analysis?symbol=BTCUSDT").contains("SMOKE_FIXTURE"))
+        check(get("/api/v1/engine/analysis?symbol=BTCUSDT").contains("BULLISH_CONFLUENCE"))
+        check(get("/api/v1/market/analysis?symbol=BTCUSDT").contains("SMOKE_FIXTURE"))
         val messages = LinkedBlockingQueue<String>()
         ws = client.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5)).buildAsync(
             URI("ws://127.0.0.1:8765/ws/signals"), object : WebSocket.Listener {
@@ -80,7 +83,7 @@ fun main() {
         runBlocking { server.awaitSettled(20_000) }
         server.start()
         awaitHealth()
-        println("PASS: actual AgentHttpServer HTTP, file/history, WebSocket snapshot/push, SSE ping/push, stop/restart")
+        println("PASS: actual AgentHttpServer HTTP, file/history, engine analysis, WebSocket snapshot/push, SSE ping/push, stop/restart")
     } finally {
         ws?.abort()
         sse?.close()

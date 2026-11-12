@@ -102,6 +102,29 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   `scalpingSetup`/`scalpingRegime`. Snapshot sinyal **tidak membawa** angka RSI/MACD
   mentah, jadi field itu wajib tetap null — mengisinya dengan angka karangan adalah bug,
   bukan perbaikan. Penjaga: `AgentSignalBreakdownTest` + source-scan dua titik emit.
+- **Rute baca analisis engine ditambahkan (2026-11-12).** `GET /api/v1/engine/analysis?symbol=&exchange=`
+  (alias `/api/v1/market/analysis`) mengembalikan analisis **tiga mode** (scalping/intraday/swing)
+  + indikator teknikal, dihitung `AgentEngineAnalysisProvider` lewat `ModeSignalEvaluator`
+  (satu-satunya pemetaan `StrategyMode → evaluator` — jangan dirakit ulang di bridge).
+  Aturan yang mengikat:
+  - rute **publik tanpa token** (hanya data pasar + hasil mesin; tidak menyentuh state order);
+  - angka keluar **apa adanya** dari mesin — bridge tidak menghitung ulang skor/R:R/indikator;
+  - `available=false` + `error` = analisis **tidak bisa dihitung** (simbol tak dikenal, ticker
+    mati, bursa tidak melayani pair itu). Mode `null` = data candle **kurang** untuk mode itu.
+    Dua keadaan berbeda dan tidak boleh dicampur;
+  - `Indodax` hanya menerima pair IDR (aturan "Batasan pasar"); pair lain **ditolak**, bukan
+    diganti ke pair lain;
+  - tarif diambil dari `AppPreferences.feeConfigFor(symbol, exchange)` (tarif kustom user ikut),
+    bukan `FeeSchedule.configFor` langsung.
+  Penjaga: `AgentEngineAnalysisTest` (10 uji) + smoke `tools/bridge-smoke` (rute diuji dengan
+  fixture, bentuk JSON sama dengan produksi karena DTO-nya di-copy apa adanya).
+- **Smoke bridge wajib ikut jalan tiap kali bridge berubah (2026-11-12).** `tools/bridge-smoke`
+  menyalin **sebagian** berkas produksi, jadi perubahan bridge bisa membuatnya **merah tanpa
+  disadari**. Stub yang wajib diselaraskan: `AppPreferences` (token), `ScalpingMtfSnapshot`
+  (dipakai `AgentOutputModels`), `AgentTradingCommandHandler` + `AgentTradingModels.kt` (rute
+  tulis `/api/v1/trading/*`), dan assertion nama service di `smoke/Main.kt`
+  (`agent-bridge-v2` → `analisa-pasar-agent-bridge-v3`). Rute/field baru di
+  `AgentHttpServer.kt` **wajib** punya assertion smoke atau dib.stub dengan jelas.
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

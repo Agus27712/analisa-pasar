@@ -125,6 +125,16 @@ berkasnya:
   F = label `Net R:R TP1` + catatan gross/net + sampel (`IntradayTargetText`) dan label fase sesi
   memakai menit terakhir fase. Rincian: `workplan2.md` §79–§85.
 
+- **Laporan baru 2026-11-12 — `docs/laporan_temuan_bugs_smoke_bridge.md`.** Temuan: proyek
+  `tools/bridge-smoke` **tidak bisa dikompilasi** sejak perubahan bridge tanggal 2026-11-06
+  (token endpoint tulis + `TechnicalBreakdown`): stub `ScalpingMtfSnapshot` dan
+  `AppPreferences` hilang, `AgentTradingModels.kt` tidak ikut disalin, `AgentTradingCommandHandler`
+  tidak di-stub, dan assertion nama service masih `agent-bridge-v2`. Akibatnya job `bridge-smoke`
+  di Actions merah selama itu **tanpa disadari** — verifikasi bridge mati. Ditutup di sesi yang
+  sama (stub diselaraskan, smoke lokal PASS). Ringkas: proyek smoke menyalin **hanya** sebagian
+  berkas produksi, jadi perubahan bridge bisa membuatnya merah diam-diam. Rute/field baru di
+  `AgentHttpServer.kt` wajib punya assertion smoke. Rincian: `workplan2.md` §96.5–§96.6.
+
 ## Folder eksperimen (`docs/exp/`)
 
 Berisi **hasil eksperimen terukur** — satu berkas per eksperimen, bernama

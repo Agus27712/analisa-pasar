@@ -91,7 +91,7 @@
 | Branch kerja | **`main`** (push langsung ke `main` diizinkan atas instruksi owner; `patch` hanya histori) |
 | HEAD `main` | Ukur sendiri: `git log --oneline -1` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **908 uji · 13 gagal · 5 dilewati** (mesin lokal, 2026-11-03). Ke-13 kegagalan **basi**: `data/tokocrypto_v7/DOGEUSDT_1h.csv` dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`; baseline `git stash` tanpa perubahan apa pun gagal di tiga kelas dan jumlah yang sama (`IntradayAccountingAndSessionTest` 4, `IntradayReplayWindowAccountingTest` 3, `IntradayGeometryAndMacdHistTest` 6). Angka hijau terakhir lewat Actions `Unit Tests (Manual)` run `41369761644`: **893 uji / 0 gagal / 5 dilewati** (125 kelas) pada `main` sebelum data v7 dihapus. |
+| Unit test | **953 uji · 13 gagal · 5 dilewati** (mesin lokal, 2026-11-12, 137 kelas). Ke-13 kegagalan **basi**: `data/tokocrypto_v7/DOGEUSDT_1h.csv` dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`;baseline `git stash` tanpa perubahan apa pun gagal di tiga kelas dan jumlah yang sama (`IntradayAccountingAndSessionTest` 4, `IntradayReplayWindowAccountingTest` 3, `IntradayGeometryAndMacdHistTest` 6). Angka hijau terakhir lewat Actions `Unit Tests (Manual)` run `41369761644`: **893 uji / 0 gagal / 5 dilewati** (125 kelas) pada `main` sebelum data v7 dihapus. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Uji parity replay | **30 test OK** (26 lama + 4 uji sweep), diukur 2026-10-24 |
 | Eksperimen exit | **Sweep 5 mode 2026-10-24: 0 dari 90 sel positif** (`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`); kontrol classic 90m identik CLI 620/14,84%/−0,1569. Mode terbaik `early` 420m XRP tetap −0,666%/trade. Sebelumnya EARLY 2026-10-22: avg R −0,1522 vs −0,1569 (di dalam noise). |
@@ -521,6 +521,15 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     `IntradayGeometryAndMacdHistTest` (6). Selalu buktikan dengan baseline `git stash` sebelum
     menyalahkan perubahan sendiri; jangan "menghijaukan" dengan menghapus uji. Pilihannya:
     mengembalikan dataset v7 atau memindahkan uji ke `data/tokocrypto_v8` (menunggu owner).
+31. **Proyek smoke `tools/bridge-smoke` menyalin hanya sebagian berkas produksi — jadi bisa merah
+    tanpa jejak.** Sejak perubahan bridge 2026-11-06, stub smoke tertinggal (stub
+    `ScalpingMtfSnapshot` + `AppPreferences` hilang, `AgentTradingModels.kt` tidak ikut disalin,
+    `AgentTradingCommandHandler` tidak di-stub) ⇒ **build smoke gagal** dan job `bridge-smoke` di
+    Actions merah selama itu tanpa disadari. Diperbaiki 2026-11-12 (laporan:
+    `docs/laporan_temuan_bugs_smoke_bridge.md`). Aturan: setiap rute/field baru di
+    `AgentHttpServer.kt` **wajib** punya assertion smoke atau stub smoke yang jelas; kalau
+    `./gradlew` app hijau tetapi smoke merah, **smoke itu yang benar** — jangan menyalahkan
+    smoke tanpa membaca apa yang berubah di bridge.
 
 ---
 

@@ -19,10 +19,19 @@ val ktorVersion = tomlVersion("ktor")
 val coroutinesVersion = tomlVersion("kotlinxCoroutinesCore")
 val serializationVersion = tomlVersion("kotlinxSerialization")
 
-// Salin apa adanya dua berkas produksi yang diuji ke source set smoke.
+// Salin apa adanya berkas produksi yang diuji ke source set smoke.
+// `AgentEngineAnalysisModels.kt` ikut karena murni Kotlin + kotlinx.serialization, jadi
+// kontrak JSON analisis engine yang diuji IDENTIK dengan produksi. Provider-nya sendiri
+// (yang menarik mesin engine + bursa + prefs terenkripsi) tidak di-copy; digantikan stub
+// di src/main/kotlin/agu/analys/bridge/SmokeEngineAnalysisProvider.kt.
 val copyRealSources = tasks.register<Copy>("copyRealSources") {
     from(rootDir.resolve("../../app/src/main/java")) {
-        include("agu/analys/bridge/AgentHttpServer.kt", "agu/analys/bridge/AgentOutputModels.kt")
+        include(
+            "agu/analys/bridge/AgentHttpServer.kt",
+            "agu/analys/bridge/AgentOutputModels.kt",
+            "agu/analys/bridge/AgentTradingModels.kt",
+            "agu/analys/bridge/AgentEngineAnalysisModels.kt"
+        )
     }
     into(layout.buildDirectory.dir("real-src"))
 }
