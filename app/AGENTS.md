@@ -924,12 +924,17 @@ slider**. Temuan lengkap: `docs/laporan_temuan_bugs_intraday.md`; ringkasan kepu
    frekuensi; jangan mengembalikan pembandingan bersatuan harga.
 9. **Penjaga intraday harus uji perilaku, bukan pindai sumber (2026-10-28).** Uji
    `sumber.contains("...")` hanya menebak dari nama variabel — nama berubah, uji gagal, perilaku
-   tidak terbukti. Penjaga intraday memakai dataset `data/tokocrypto_v7/DOGEUSDT_1h.csv`
-   (999 bar) lewat `IntradayReplayEngine.replay`. **PERHATIAN (2026-11-03):** berkas itu sudah
-   dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`,
-   sehingga 13 uji di tiga kelas intraday saat ini **MERAH karena dataset hilang**, bukan karena
-   regresi engine. Jangan mengklaim hijau sebelum owner memutuskan: mengembalikan dataset v7 atau
-   memindahkan uji ke `data/tokocrypto_v8`. Rincian: `workplan2.md` §90.
+   tidak terbukti. **KEPUTUSAN OWNER 2026-11-12:** 13 uji intraday yang butuh dataset
+   `data/tokocrypto_v7` (sudah dihapus di commit `88103ec`) **dihapus**, bukan dipindahkan ke
+   `data/tokocrypto_v8`. Kelas `IntradayReplayWindowAccountingTest` dihapus seluruhnya;
+   `IntradayAccountingAndSessionTest` dan `IntradayGeometryAndMacdHistTest` kini 6 + 6 uji
+   memakai fixture `TestData` (tanpa dataset eksternal). Suite: **940 uji · 0 gagal · 5 dilewati**
+   (136 kelas, diukur 2026-11-12).
+   **Konsekuensi yang harus diketahui:** penjaga "replay memakai net dengan partisi lengkap",
+   "ambang macdHist ikut mengubah frekuensi", "batas atas 5% membuat gate gagal jujur", dan
+   penjaga akuntansi jendela replay **tidak ada lagi** di repo. Kalau akuntansi atau geometri
+   intraday diubah, penjaga baru **wajib** dibuat (idealnya di atas `data/tokocrypto_v8`).
+   Rincian: `workplan2.md` §97.
    Uji itu membandingkan ambang config 0,0 vs 99,0, fee maker + slippage
    dari config, ringkasan net dihitung ulang dari daftar trade, dan konsistensi label `VALID_ENTRY_*`
    dengan klasifikasi net. Sejak paket G (30 Okt 2026) ada slider/holder, tetapi aturannya tetap:

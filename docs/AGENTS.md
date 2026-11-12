@@ -328,6 +328,10 @@ hipotesis, tidak ada angka edge, dan tidak ada dataset baru. Aturan penulisan te
   "908 uji, 13 gagal" **dan** alasan 13 kegagalan itu basi (dataset v7 hilang, terbukti lewat
   `git stash`). Menulis "semua hijau" adalah klaim palsu; menulis "13 gagal" tanpa penjelasan
   membuat pembaca berikutnya memburu regresi yang tidak ada.
+  **Catatan 2026-11-12:** 13 uji basi itu akhirnya **dihapus** atas instruksi owner (lihat
+  `workplan2.md` §97), jadi suite sekarang **940 uji · 0 gagal · 5 dilewati**. Aturan ini tetap
+  berlaku: penghapusan seperti itu harus **disebut** di dokumen (beserta penjaga apa yang hilang),
+  bukan dilakukan diam-diam lalu ditulis sebagai "semua hijau".
 - **Bedakan "default dikunci" dari "default terbukti bagus".** `SwingConfig.DEFAULT` hanya
   mereproduksi perilaku lama; tidak ada klaim bahwa angka itu menguntungkan. Setiap dokumen yang
   menyebut preset/config wajib menyatakan itu — sinyal SWING belum pernah diukur positif setelah

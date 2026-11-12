@@ -6,8 +6,9 @@
 > `/api/v1/trading/*` wajib header `X-Agent-Token`, `HOST` loopback `127.0.0.1` faktual,
 > `TechnicalBreakdown` diisi dari snapshot MTF, respons order riil dari `RealFillRecord` —
 > `workplan2.md` §93, laporan `docs/laporan_temuan_bugs_agent_bridge_keamanan_data.md`).
-> Sebelumnya **2026-11-03** (slider SWING: 18 knob, default = literal engine lama,
-> tanpa riset; plus catatan dataset `tokocrypto_v7` yang hilang membuat 13 uji intraday merah).
+> Previously **2026-11-03** (slider SWING: 18 knob, default = literal engine lama,
+> tanpa riset; plus catatan dataset `tokocrypto_v7` yang hilang membuat 13 uji intraday merah —
+> 13 uji itu **dihapus** atas keputusan owner 2026-11-12, lihat §4 dan `workplan2.md` §97).
 > Sebelumnya **2026-10-24** (sweep 5 mode exit: 0/90 sel positif, exit-only ditutup lagi; diagnostik
 > persentil entry: entry khas di persentil 93 harga 1 hari; prioritas tetap pengukuran
 > entry/universe).
@@ -91,7 +92,7 @@
 | Branch kerja | **`main`** (push langsung ke `main` diizinkan atas instruksi owner; `patch` hanya histori) |
 | HEAD `main` | Ukur sendiri: `git log --oneline -1` |
 | Titik masuk kode | package `agu.analys`, modul tunggal `:app` |
-| Unit test | **953 uji · 13 gagal · 5 dilewati** (mesin lokal, 2026-11-12, 137 kelas). Ke-13 kegagalan **basi**: `data/tokocrypto_v7/DOGEUSDT_1h.csv` dihapus di commit `88103ec` (2026-11-02) sementara 20 rujukan masih ada di `app/src/test`;baseline `git stash` tanpa perubahan apa pun gagal di tiga kelas dan jumlah yang sama (`IntradayAccountingAndSessionTest` 4, `IntradayReplayWindowAccountingTest` 3, `IntradayGeometryAndMacdHistTest` 6). Angka hijau terakhir lewat Actions `Unit Tests (Manual)` run `41369761644`: **893 uji / 0 gagal / 5 dilewati** (125 kelas) pada `main` sebelum data v7 dihapus. |
+| Unit test | **940 uji · 0 gagal · 5 dilewati** (mesin lokal, 2026-11-12, 136 kelas). Angka hijau terakhir lewat Actions `Unit Tests (Manual)` run `41369761644`: **893 uji / 0 gagal / 5 dilewati** (125 kelas) pada `main` sebelum data v7 dihapus. |
 | APK debug | 26.821.815 byte (26,8 MB desimal / 25,6 MiB) — terakhir diukur 2026-10-20 |
 | Uji parity replay | **30 test OK** (26 lama + 4 uji sweep), diukur 2026-10-24 |
 | Eksperimen exit | **Sweep 5 mode 2026-10-24: 0 dari 90 sel positif** (`docs/exp/exp_exit_mode_sweep_ADA-DOGE-XRP.md`); kontrol classic 90m identik CLI 620/14,84%/−0,1569. Mode terbaik `early` 420m XRP tetap −0,666%/trade. Sebelumnya EARLY 2026-10-22: avg R −0,1522 vs −0,1569 (di dalam noise). |
@@ -246,13 +247,17 @@ Riwayat lengkap ada di `workplan2.md` §14/§15 (keduanya bertanda ⛔ DIHAPUS) 
 Diurutkan berdasarkan **nilai dibagi risiko**. Jangan mengerjakan yang bawah sebelum yang atas
 selesai, kecuali ada instruksi eksplisit.
 
-> 🔧 **Menunggu keputusan owner (2026-11-03): masa depan dataset `data/tokocrypto_v7`.**
-> Berkas itu dihapus di commit `88103ec` (2026-11-02), tetapi 20 rujukan masih tertinggal di
-> `app/src/test`, sehingga **13 uji intraday merah** (bukan regresi engine; terbukti lewat
-> `git stash`). Dua pilihan yang wajar: (a) mengembalikan dataset v7, atau (b) memindahkan uji ke
-> `data/tokocrypto_v8` yang sudah ada. Keduanya menyentuh makna angka uji intraday, jadi **jangan
-> diputuskan sendiri**; dan jangan "menghijaukan" dengan menghapus ujinya. Rincian: `workplan2.md`
-> §90, perangkap #30.
+> ✅ **Keputusan owner 2026-11-12 — 13 uji intraday yang butuh dataset `data/tokocrypto_v7`
+> DIHAPUS.** Berkas dataset itu dihapus di commit `88103ec` (2026-11-02); 20 rujukan masih
+> tertinggal di `app/src/test` sehingga **13 uji intraday merah** sejak itu (bukan regresi engine;
+> terbukti lewat `git stash`). Owner memutuskan **menghapus ujinya**, bukan mengembalikan dataset
+> v7 dan bukan memindahkannya ke `data/tokocrypto_v8`. Kelas `IntradayReplayWindowAccountingTest`
+> dihapus seluruhnya; dua kelas lain tinggal 6 + 6 uji berbasis fixture `TestData`.
+> Suite sekarang **940 uji · 0 gagal · 5 dilewati** (136 kelas, diukur 2026-11-12).
+> **Konsekuensi:** penjaga akuntansi replay intraday, frekuensi ambang macdHist, batas atas
+> `maxTp1Pct`, dan penjaga jendela replay **tidak ada lagi** di repo — perubahan akuntansi atau
+> geometri intraday wajib diikuti penjaga baru (idealnya di atas `data/tokocrypto_v8`).
+> Rincian: `workplan2.md` §97.
 
 > ⛔ **Keputusan 2026-10-21 — riset v2 dan v3 dihentikan.** V2 dan v3 tidak menghasilkan edge;
 > owner menghentikan seluruh line riset ini karena hanya memperpanjang research. Commit v3
@@ -515,12 +520,15 @@ Aturan yang sudah berlaku dan **jangan dilonggarkan**:
     golden harus dibangun sendiri dengan angka eksplisit (atau potongan CSV ter-commit), bukan dari
     helper berisi keacakan. Kalau uji Anda gagal hanya pada nilai TP1/R:R, curigai fixture dulu
     sebelum menuduh engine berubah.
-30. **`data/tokocrypto_v7` sudah dihapus (commit `88103ec`, 2026-11-02) tetapi masih dirujuk 20 kali
-    di `app/src/test`.** Tiga kelas intraday karenanya **merah karena dataset hilang**, bukan karena
-    regresi: `IntradayAccountingAndSessionTest` (4), `IntradayReplayWindowAccountingTest` (3),
-    `IntradayGeometryAndMacdHistTest` (6). Selalu buktikan dengan baseline `git stash` sebelum
-    menyalahkan perubahan sendiri; jangan "menghijaukan" dengan menghapus uji. Pilihannya:
-    mengembalikan dataset v7 atau memindahkan uji ke `data/tokocrypto_v8` (menunggu owner).
+30. **Dataset `data/tokocrypto_v7` sudah dihapus (commit `88103ec`, 2026-11-02).** Semula 13 uji
+    intraday **merah** karena dataset hilang (bukan regresi engine — terbukti lewat baseline
+    `git stash`). **2026-11-12: owner memutuskan menghapus 13 uji itu**, bukan mengembalikan
+    dataset v7 dan bukan memindahkannya ke `data/tokocrypto_v8`. Suite sekarang **940 uji ·
+    0 gagal · 5 dilewati**. Konsekuensi: penjaga akuntansi replay intraday, frekuensi ambang
+    macdHist, batas atas `maxTp1Pct`, dan penjaga jendela replay **tidak ada lagi** — perubahan
+    akuntansi/geometri intraday wajib diikuti penjaga baru. Rincian: `workplan2.md` §97.
+    Alat ukur berbasis v7 yang masih ada (`IntradayMaxTp1SweepTest`) **tidak bisa dijalankan
+    lagi** (butuh folder v7); padanannya `IntradayMaxTp1SweepV8Test` (v8) masih utuh.
 31. **Proyek smoke `tools/bridge-smoke` menyalin hanya sebagian berkas produksi — jadi bisa merah
     tanpa jejak.** Sejak perubahan bridge 2026-11-06, stub smoke tertinggal (stub
     `ScalpingMtfSnapshot` + `AppPreferences` hilang, `AgentTradingModels.kt` tidak ikut disalin,

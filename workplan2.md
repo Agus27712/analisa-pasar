@@ -6077,11 +6077,9 @@ disadari. Diperbaiki pada sesi ini (laporan lengkap:
 
 ### 96.6 Bukti
 
-- **Seluruh unit test aplikasi** (lokal, `./gradlew :app:testDebugUnitTest`): **953 uji · 13 gagal ·
-  5 dilewati** (137 kelas). Ke-13 kegagalan itu **basi** — `data/tokocrypto_v7` sudah dihapus
-  (perapp #30 di `docs/PANDUAN-LANJUT-AGEN.md`): `IntradayAccountingAndSessionTest` (4),
-  `IntradayReplayWindowAccountingTest` (3), `IntradayGeometryAndMacdHistTest` (6). Tidak ada
-  kegagalan baru dari port ini. Angka diukur dari `app/build/test-results/testDebugUnitTest/*.xml`.
+- **Seluruh unit test aplikasi** (lokal, `./gradlew :app:testDebugUnitTest`): **940 uji · 0 gagal ·
+  5 dilewati** (136 kelas, diukur 2026-11-12). Angka diukur dari
+  `app/build/test-results/testDebugUnitTest/*.xml`, bukan dari ingatan.
 - **Unit test area bridge** (lokal, `./gradlew :app:testDebugUnitTest --tests "agu.analys.bridge.*"`):
   **42 uji · 0 gagal · 0 dilewati** (7 kelas). Yang baru: `AgentEngineAnalysisTest` (10 uji) +
   1 uji rute di `AgentBridgeServerTest` ("rute analisis engine terdaftar dan menolak simbol tak
@@ -6112,3 +6110,46 @@ disadari. Diperbaiki pada sesi ini (laporan lengkap:
   sinyal di UI, bukan angka historis yang bisa dipakai sebagai bukti edge.
 - Tidak ada perubahan pada gate entry, parameter engine, slider, atau model fee.
 - `GET /api/v1/market/analysis` adalah alias, bukan dua hitungan berbeda.
+
+---
+
+## 97. 13 unit test intraday yang gagal dihapus atas instruksi owner (2026-11-12)
+
+Instruksi owner: "hapus unit test yg gagal". Yang dimaksud adalah 13 uji yang **merah** —
+semuanya karena dataset `data/tokocrypto_v7` dihapus dari repo (commit `88103ec`, 2026-11-02),
+bukan karena perilaku engine berubah. Buktinya: baseline `git stash` tanpa perubahan apa pun
+gagal di tiga kelas yang sama dengan jumlah yang sama.
+
+### 97.1 Yang dihapus
+
+| Kelas | Uji | Jumlah |
+|---|---|---|
+| `IntradayAccountingAndSessionTest` | `ringkasanReplayMemakaiNetDanPartisiLengkap`, `ambangGateMemakaiConfig_bukanLiteral`, `labelPeristiwaDanKlasifikasiNet_tidakBisaBertentangan`, `feeMakerDanSlippageDariConfig_ikutMengubahNetRr` | 4 (dihapus) |
+| `IntradayGeometryAndMacdHistTest` | `macdHistDinormalisasi_konsistenAntarSkalaHarga`, `checkpointKonfluensiMemakaiGeometriDanAmbangIntraday`, `checkpointMemakaiRrNegatifApaAdanya_bukanDipipihkan`, `setiapTradeReplayMemenuhiAmbangRrDariConfig`, `ambangMacdHistDariConfig_ikutMengubahFrekuensi`, `batasAtasBawaan5Persen_membuatGateGagalJujur` | 6 (dihapus) |
+| `IntradayReplayWindowAccountingTest` | seluruh kelas (3 uji, semuanya butuh dataset v7) | 3 (file dihapus) |
+
+Helper yang jadi tak terpakai ikut dibuang (`muatCandleH1Riset`, `pilihBarRrMemenuhiAmbang`,
+`wib`) beserta import yang tidak dipakai. Yang **tetap ada**: `IntradayAccountingAndSessionTest`
+(6 uji) dan `IntradayGeometryAndMacdHistTest` (6 uji) — semuanya berbasis fixture `TestData`,
+tanpa dataset eksternal.
+
+### 97.2 Angka setelahnya (diukur, bukan diperkirakan)
+
+`./gradlew :app:testDebugUnitTest` → **940 uji · 0 gagal · 5 dilewati** (136 kelas).
+Sebelumnya: 953 uji · 13 gagal · 5 dilewati (137 kelas). Selisihnya tepat 13 uji yang dihapus +
+1 kelas yang hilang. 5 uji yang dilewati tetap sama (alat ukur ber-gate env var).
+
+### 97.3 Yang **tidak** diklaim — penjaga yang hilang
+
+- Penjaga **akuntansi replay intraday** (menang/kalah net dengan partisi lengkap) **tidak ada lagi**
+  di repo ini.
+- Penjaga **ambang macdHist ikut mengubah frekuensi**, **batas atas `maxTp1Pct` 5% membuat gate
+  gagal jujur**, dan **setiap trade replay memenuhi ambang R:R** **tidak ada lagi**.
+- Penjaga **akuntansi jendela replay** (`LOOKAHEAD_EXPIRY` vs `END_OF_DATA`) **tidak ada lagi**
+  (kelasnya dihapus seluruhnya).
+- Jadi: kalau akuntansi atau geometri intraday diubah, **penjaga baru wajib dibuat** — idealnya di
+  atas `data/tokocrypto_v8` yang masih ada. Aturan "jangan menghijaukan dengan menghapus uji"
+  tetap berlaku untuk kasus lain; penghapusan ini **keputusan owner** dan dicatat di sini, di
+  `app/AGENTS.md`, `docs/AGENTS.md`, dan `docs/PANDUAN-LANJUT-AGEN.md`.
+- Alat ukur `IntradayMaxTp1SweepTest` (v7) **tidak bisa dijalankan lagi** — dataset-nya tidak ada.
+  Padanannya `IntradayMaxTp1SweepV8Test` (v8) masih utuh.
