@@ -211,9 +211,13 @@ class AgentTradingTest {
         val server = kode("agu/analys/bridge/AgentHttpServer.kt")
         assertTrue("server wajib menyalakan pendorong", server.contains("startPortfolioPush()"))
         assertTrue("rute WS portfolio", server.contains("webSocket(\"/ws/portfolio\")"))
+        val mergeBlock = server.substringAfter("merge(", "")
         assertTrue(
-            "SSE wajib menggabungkan sinyal + portofolio",
-            server.contains("merge(AgentEventBus.signals, AgentEventBus.portfolio)")
+            "SSE wajib menggabungkan sinyal + portofolio + marketScan + agentSelection",
+            mergeBlock.contains("AgentEventBus.signals") &&
+                mergeBlock.contains("AgentEventBus.portfolio") &&
+                mergeBlock.contains("AgentEventBus.marketScan") &&
+                mergeBlock.contains("AgentEventBus.agentSelection")
         )
         assertTrue("label event portfolio", server.contains("event: portfolio"))
 

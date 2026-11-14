@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
@@ -20,6 +21,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +61,7 @@ fun WatchlistCoinCard(
     recentCandles: List<CandleBar> = emptyList(),
     holdingStatus: CoinHoldingStatus? = null,
     tradingFees: agu.analys.config.TradingFeeConfig = agu.analys.config.TradingFeeConfig(),
+    isAgentSelected: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -150,7 +154,9 @@ fun WatchlistCoinCard(
         label = "pulse_alpha_${pair.symbol}"
     )
 
-    val cardBorder = if (isHolding) {
+    val cardBorder = if (isAgentSelected) {
+        BorderStroke(2.dp, TvAmber)
+    } else if (isHolding) {
         if (badgeInfo != null && badgeInfo.isExitDecisionEvent) {
             BorderStroke(1.4.dp, badgeInfo.color.copy(alpha = pulseAlpha))
         } else {
@@ -166,12 +172,18 @@ fun WatchlistCoinCard(
         BorderStroke(1.dp, DashboardColors.Border)
     }
 
+    val cardContainerColor = if (isAgentSelected) {
+        lerp(DashboardColors.Card, TvAmber, 0.08f)
+    } else {
+        DashboardColors.Card
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DashboardColors.Card),
+        colors = CardDefaults.cardColors(containerColor = cardContainerColor),
         border = cardBorder
     ) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -221,9 +233,33 @@ fun WatchlistCoinCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            if (isAgentSelected) {
+                                Row(
+                                    modifier = Modifier
+                                        .background(TvAmber.copy(alpha = 0.16f), RoundedCornerShape(4.dp))
+                                        .border(0.8.dp, TvAmber.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                        .testTag("watchlist_agent_selected_badge_${pair.symbol}"),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = "Pilihan Agen",
+                                        tint = TvAmber,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        text = "PILIHAN AGEN",
+                                        color = TvAmber,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
                             if (badges.isNotEmpty()) {
                                 CoinBadgeRow(badges = badges.take(1))
-                            } else {
+                            } else if (!isAgentSelected) {
                                 CompactActivityChip(activity)
                             }
 

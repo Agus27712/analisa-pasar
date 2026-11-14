@@ -113,7 +113,7 @@ class AgentBridgeServerTest {
     @Test
     fun `port terpakai dilaporkan Failed bukan melempar keluar`() {
         runBlocking {
-            ServerSocket(AgentHttpServer.PORT).use {
+            ServerSocket(AgentHttpServer.PORT, 1, java.net.InetAddress.getByName(AgentHttpServer.HOST)).use {
                 server.start()
                 val state = server.awaitSettled(20_000)
                 assertTrue("keadaan akhir: $state", state is AgentBridgeServerState.Failed)
@@ -313,5 +313,140 @@ class AgentBridgeServerTest {
             server.stop()
             server.awaitSettled(10_000)
         }
+    }
+
+    private fun httpDelete(path: String, token: String? = null): Pair<Int, String> {
+        val conn = URL("http://127.0.0.1:${AgentHttpServer.PORT}$path").openConnection() as HttpURLConnection
+        conn.connectTimeout = 1_500
+        conn.readTimeout = 1_500
+        conn.requestMethod = "DELETE"
+        if (token != null) conn.setRequestProperty(AgentHttpServer.HEADER_TOKEN, token)
+        return try {
+            val code = conn.responseCode
+            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            code to text
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    @Test
+    fun `market scan menolak permintaan bursa silang agar tidak mencampur data`() {
+        runBlocking {
+            server.start()
+            assertTrue(server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+
+            val (mismatchCode, mismatchBody) = httpGet("/api/v1/market/scan?exchange=INDODAX")
+            assertEquals(400, mismatchCode)
+            assertTrue("harus menjelaskan penolakan silang: $mismatchBody", mismatchBody.contains("\"available\":false"))
+
+            server.stop()
+            server.awaitSettled(10_000)
+        }
+    }
+
+    @Test
+    fun `select-pair mewajibkan token, menolak lebih dari 1 pair, dan menerima tepat 1 pair`() {
+        runBlocking {
+            server.start()
+            assertTrue(server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+            val token = AgentHttpServer.lastInstalledBridgeToken ?: ""
+            assertTrue(token.isNotBlank())
+
+            val (noTokenCode, _) = httpPost("/api/v1/agent/select-pair", """{"symbol":"BTCUSDT"}""")
+            assertEquals(401, noTokenCode)
+
+            val (multiCode, multiBody) = httpPost(
+                "/api/v1/agent/select-pair",
+                """{"symbol":"BTCUSDT,ETHUSDT"}""",
+                token = token
+            )
+            assertEquals(400, multiCode)
+            assertTrue("multi-pair harus ditolak: $multiBody", multiBody.contains("\"success\":false"))
+
+            val (okCode, okBody) = httpPost(
+                "/api/v1/agent/select-pair",
+                """{"symbol":"BTCUSDT","reason":"uji skor tinggi"}""",
+                token = token
+            )
+            assertEquals(200, okCode)
+            assertTrue(okBody.contains("\"symbol\":\"BTCUSDT\""))
+
+            val (getCode, getBody) = httpGet("/api/v1/agent/select-pair")
+            assertEquals(200, getCode)
+            assertTrue(getBody.contains("BTCUSDT"))
+
+            val (delCode, delBody) = httpDelete("/api/v1/agent/select-pair", token = token)
+            assertEquals(200, delCode)
+            assertTrue(delBody.contains("\"success\":true"))
+
+            server.stop()
+            server.awaitSettled(10_000)
+        }
+    }
+
+    @Test
+    fun `websocket dan sse mengirim market_scan ke agenfeed`() {
+        runBlocking {
+            server.start()
+            assertTrue(server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+            val marker = "UJISCAN${System.currentTimeMillis() % 100000}"
+            AgentEventBus.emitMarketScan(
+                AgentMarketScanOutput(
+                    ts = System.currentTimeMillis(),
+                    available = true,
+                    exchange = "TOKOCRYPTO",
+                    totalPairsScanned = 12,
+                    bullishCount = 3,
+                    marketSummary = marker
+                )
+            )
+
+            val wsQueue = java.util.concurrent.LinkedBlockingQueue<String>()
+            val ws = java.net.http.HttpClient.newHttpClient()
+                .newWebSocketBuilder()
+                .buildAsync(
+                    java.net.URI.create("ws://127.0.0.1:${AgentHttpServer.PORT}/ws/market-scan"),
+                    object : java.net.http.WebSocket.Listener {
+                        private val buf = StringBuilder()
+                        override fun onText(
+                            webSocket: java.net.http.WebSocket,
+                            data: CharSequence,
+                            last: Boolean
+                        ): java.util.concurrent.CompletionStage<*>? {
+                            buf.append(data)
+                            if (last) {
+                                wsQueue.offer(buf.toString())
+                                buf.setLength(0)
+                            }
+                            webSocket.request(1)
+                            return null
+                        }
+                    }
+                )
+                .get(5, java.util.concurrent.TimeUnit.SECONDS)
+            try {
+                var frame = wsQueue.poll(6, java.util.concurrent.TimeUnit.SECONDS)
+                if (frame == null || !frame.contains(marker)) {
+                    frame = wsQueue.poll(6, java.util.concurrent.TimeUnit.SECONDS) ?: frame
+                }
+                assertTrue("market scan WS tidak diterima: $frame", frame != null && frame.contains(marker))
+            } finally {
+                ws.abort()
+                server.stop()
+                server.awaitSettled(10_000)
+            }
+        }
+    }
+
+    @Test
+    fun `perpindahan bursa menghapus pilihan pair agen bursa sebelumnya`() {
+        val res = AgentMarketScanProvider.selectPair(context, "BTCUSDT", "uji")
+        assertTrue(res.success)
+        assertEquals("BTCUSDT", AgentMarketScanProvider.currentSelection()?.symbol)
+
+        AgentMarketScanProvider.onExchangeChanged("INDODAX")
+        assertEquals(null, AgentMarketScanProvider.currentSelection())
     }
 }

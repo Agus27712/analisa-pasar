@@ -108,4 +108,59 @@ class AgentBridgeTest {
         AgentEventBus.emitSignal(signal)
         job.join()
     }
+
+    @Test
+    fun `serialisasi market scan dan emit ke AgentEventBus bekerja`() = runTest {
+        val scan = AgentMarketScanOutput(
+            ts = 1730000005000L,
+            available = true,
+            exchange = "TOKOCRYPTO",
+            usdtIdrRate = 16000.0,
+            totalPairsScanned = 42,
+            bullishCount = 7,
+            marketSummary = "TOKOCRYPTO: 42 pair dipindai",
+            topCandidates = listOf(
+                AgentMarketScanCandidate(
+                    rank = 1,
+                    symbol = "SOLUSDT",
+                    baseAsset = "SOL",
+                    quoteAsset = "USDT",
+                    exchange = "TOKOCRYPTO",
+                    price = 180.0,
+                    change24h = 5.4,
+                    volume24h = 10_000_000.0,
+                    volumeIdr = 160_000_000_000.0,
+                    rangePositionPct = 78.0,
+                    serverScore = 86.2,
+                    momentumTier = "STRONG_UP",
+                    reasonSummary = "Momentum naik sehat"
+                )
+            )
+        )
+        val encoded = json.encodeToString(scan)
+        assertTrue(encoded.contains("\"type\":\"market_scan\""))
+        assertTrue(encoded.contains("\"exchange\":\"TOKOCRYPTO\""))
+        val decoded = json.decodeFromString<AgentMarketScanOutput>(encoded)
+        assertEquals(42, decoded.totalPairsScanned)
+        assertEquals("SOLUSDT", decoded.topCandidates.first().symbol)
+
+        val scanJob = launch {
+            val received = AgentEventBus.marketScan.first { it.ts == 1730000005000L }
+            assertEquals("TOKOCRYPTO", received.exchange)
+        }
+        AgentEventBus.emitMarketScan(scan)
+        scanJob.join()
+
+        val sel = AgentPairSelection(
+            symbol = "SOLUSDT",
+            exchange = "TOKOCRYPTO",
+            reason = "Momentum naik sehat"
+        )
+        val selJob = launch {
+            val received = AgentEventBus.agentSelection.first { it.symbol == "SOLUSDT" }
+            assertEquals("TOKOCRYPTO", received.exchange)
+        }
+        AgentEventBus.emitAgentSelection(sel)
+        selJob.join()
+    }
 }

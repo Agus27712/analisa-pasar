@@ -14,6 +14,7 @@ class AgentOutputBridge {
     fun getDir() = dir
     fun getLatest() = snapshot
     fun startPortfolioPush() = Unit
+    fun startMarketScanPush() = Unit
     companion object {
         private val instance = AgentOutputBridge()
         fun getInstance(context: Context) = instance

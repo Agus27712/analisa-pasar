@@ -37,13 +37,20 @@ class AgentOutputBridge(private val context: Context) {
     }
 
     private val latestRef = AtomicReference<AgentSignalOutput?>()
+    private val prefs by lazy { agu.analys.util.AppPreferences(context.applicationContext) }
 
     /** Penjaga agar loop pendorong portofolio tidak berlipat saat server dinyalakan ulang. */
     private val portfolioPushStarted = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /** Penjaga agar loop pendorong pemindaian pasar tidak berlipat saat server dinyalakan ulang. */
+    private val marketScanPushStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val forceMarketScanTrigger = kotlinx.coroutines.channels.Channel<Unit>(
+        kotlinx.coroutines.channels.Channel.CONFLATED
+    )
+
 	fun isEnabled(): Boolean {
 		return runCatching {
-			agu.analys.util.AppPreferences(context).isAgentOutputEnabled
+			prefs.isAgentOutputEnabled
 		}.getOrDefault(false)
 	}
 
@@ -98,6 +105,85 @@ class AgentOutputBridge(private val context: Context) {
         }
     }
 
+    /**
+     * Pancarkan snapshot pemindaian seluruh pair bursa aktif ke file lokal dan agenfeed (WS + SSE).
+     */
+    fun emitMarketScan(scan: AgentMarketScanOutput) {
+        if (!isEnabled()) return
+        try {
+            scope.launch {
+                runCatching {
+                    File(outputDir, "market_scan.json").writeText(jsonPretty.encodeToString(scan))
+                }.onFailure { err ->
+                    AppLogManager.error("AgentBridge", "Gagal simpan market_scan ke berkas lokal", err)
+                }
+                AgentEventBus.emitMarketScan(scan)
+            }
+            AppLogManager.info(
+                "AgentBridge",
+                "EMIT market_scan (${scan.exchange}, ${scan.totalPairsScanned} pairs, ${scan.bullishCount} bullish) -> file+ws"
+            )
+        } catch (e: Exception) {
+            AppLogManager.error("AgentBridge", "emitMarketScan failed", e)
+        }
+    }
+
+    /**
+     * Pancarkan pembaruan pilihan 1 pair agen ke SSE/berkas lokal.
+     */
+    fun emitAgentSelection(selection: AgentPairSelection) {
+        try {
+            scope.launch {
+                runCatching {
+                    val file = File(outputDir, "agent_selection.json")
+                    if (selection.cleared) {
+                        file.delete()
+                    } else {
+                        file.writeText(jsonPretty.encodeToString(selection))
+                    }
+                }.onFailure { err ->
+                    AppLogManager.error("AgentBridge", "Gagal simpan agent_selection ke berkas lokal", err)
+                }
+                AgentEventBus.emitAgentSelection(selection)
+            }
+        } catch (e: Exception) {
+            AppLogManager.error("AgentBridge", "emitAgentSelection failed", e)
+        }
+    }
+
+    /**
+     * Dipanggil saat pengguna mengganti bursa aktif di aplikasi: bersihkan cache bursa lama
+     * dan picu pemindaian ulang khusus bursa baru agar agenfeed tidak mencampur data bursa.
+     */
+    fun onActiveExchangeChanged(newExchange: String) {
+        val normEx = newExchange.trim().uppercase()
+        AgentMarketScanProvider.onExchangeChanged(normEx)
+        scope.launch {
+            runCatching {
+                File(outputDir, "market_scan.json").delete()
+                File(outputDir, "agent_selection.json").delete()
+            }
+            AgentEventBus.emitMarketScan(
+                AgentMarketScanOutput(
+                    ts = System.currentTimeMillis(),
+                    available = false,
+                    exchange = normEx,
+                    error = "Bursa aktif dialihkan ke $normEx, sedang memindai ulang..."
+                )
+            )
+            AgentEventBus.emitAgentSelection(
+                AgentPairSelection(
+                    symbol = "",
+                    exchange = normEx,
+                    reason = null,
+                    selectedAt = System.currentTimeMillis(),
+                    cleared = true
+                )
+            )
+        }
+        forceMarketScanTrigger.trySend(Unit)
+    }
+
     fun getLatest(): AgentSignalOutput? = latestRef.get()
 
     /**
@@ -136,6 +222,49 @@ class AgentOutputBridge(private val context: Context) {
             }
         }
         AppLogManager.info("AgentBridge", "Portofolio push dimulai (interval ${AgentPortfolioPusher.EVAL_INTERVAL_MS} ms)")
+    }
+
+    /**
+     * Mulai pendorong pemindaian seluruh pair ke agenfeed (idempoten, khusus bursa aktif).
+     */
+    fun startMarketScanPush() {
+        if (!marketScanPushStarted.compareAndSet(false, true)) return
+        scope.launch {
+            var previousSignature: String? = null
+            var lastEmittedExchange: String? = null
+            var lastEmitMs = 0L
+            while (isActive) {
+                runCatching {
+                    if (isEnabled()) {
+                        val activeExAtStart = prefs.marketDataSource.name
+                        val scan = AgentMarketScanProvider.scanActiveExchange(
+                            context = context,
+                            forceRefresh = true
+                        )
+                        val activeExNow = prefs.marketDataSource.name
+                        if (scan.available && scan.exchange == activeExAtStart && activeExNow == activeExAtStart) {
+                            if (lastEmittedExchange != scan.exchange) {
+                                previousSignature = null
+                            }
+                            val sig = AgentMarketScannerPusher.signature(scan)
+                            val now = System.currentTimeMillis()
+                            if (AgentMarketScannerPusher.shouldEmit(previousSignature, sig, now, lastEmitMs)) {
+                                emitMarketScan(scan)
+                                previousSignature = sig
+                                lastEmittedExchange = scan.exchange
+                                lastEmitMs = now
+                            }
+                        }
+                    }
+                }.onFailure { err ->
+                    AppLogManager.error("AgentBridge", "Gagal memindai seluruh pair untuk agenfeed", err)
+                }
+                kotlinx.coroutines.withTimeoutOrNull(AgentMarketScannerPusher.SCAN_INTERVAL_MS) {
+                    forceMarketScanTrigger.receive()
+                }
+            }
+        }
+        AppLogManager.info("AgentBridge", "Market scan push dimulai (interval ${AgentMarketScannerPusher.SCAN_INTERVAL_MS} ms)")
     }
 
     fun getDir(): File = outputDir

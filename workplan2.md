@@ -6153,3 +6153,46 @@ Sebelumnya: 953 uji · 13 gagal · 5 dilewati (137 kelas). Selisihnya tepat 13 u
   `app/AGENTS.md`, `docs/AGENTS.md`, dan `docs/PANDUAN-LANJUT-AGEN.md`.
 - Alat ukur `IntradayMaxTp1SweepTest` (v7) **tidak bisa dijalankan lagi** — dataset-nya tidak ada.
   Padanannya `IntradayMaxTp1SweepV8Test` (v8) masih utuh.
+
+---
+
+## 98. Pemindaian seluruh pair di server, emit agenfeed per bursa aktif, & penandaan 1 pair agen di Dashboard (2026-11-14)
+
+Atas instruksi owner: model/agen di OMP membaca seluruh data pair melalui server bridge,
+perhitungan dilakukan di server dan di-emit ke agenfeed (`AgentEventBus` + WebSocket `/ws/market-scan`
++ SSE `/events`) **hanya untuk bursa aktif** (Indodax atau Tokocrypto, tidak dicampur), serta agen
+dapat menandai **tepat 1 pair** pada daftar koin di Dashboard (warna & badge `PILIHAN AGEN`) tanpa
+memindah layar Detail Coin secara otomatis.
+
+### 98.1 Yang ditambahkan / diubah
+
+| Bagian | Rincian |
+|---|---|
+| DTO & Kontrak JSON (`AgentMarketScanModels.kt`) | `AgentMarketPairItem`, `AgentMarketScanCandidate`, `AgentMarketScanOutput`, `AgentMarketPairsResponse`, `AgentPairSelectionRequest`, `AgentPairSelection`, `AgentPairSelectionResponse` (murni Kotlin + serialization, ikut disalin ke `tools/bridge-smoke`). |
+| Perhitungan Server (`AgentMarketScanner.kt`) | Validasi 1 pair (`parseSingleSymbolInput`), `scoreAllPairs` (momentum 0-40 dengan penalti overextension >15%, posisi rentang 24j 0-30, likuiditas IDR 0-30), isolasi ketat bursa aktif (`INDODAX` hanya IDR; `TOKOCRYPTO` USDT/IDR tanpa BIDR/stablecoin), serta `AgentMarketScannerPusher` (interval 60 detik, heartbeat 5 menit). |
+| Penyedia & Cache (`AgentMarketScanProvider.kt`) | Tahap 1 memindai semua ticker bursa aktif + Tahap 2 evaluasi `ModeSignalEvaluator` pada 6 kandidat terbaik (`AgentEngineAnalysisProvider.evaluateWithKnownTick`). Menolak permintaan lintas bursa (`requestedExchange != active`), dan membatasi pilihan agen ke tepat 1 pair (`selectPair` / `clearPair`). |
+| Feed & Server (`AgentEventBus`, `AgentOutputBridge`, `AgentHttpServer`) | Emit periodik `market_scan.json` + `/ws/market-scan` + SSE `event: market_scan` & `event: agent_selection`; rute HTTP `GET /api/v1/market/scan`, `GET /api/v1/market/pairs`, `GET/POST/DELETE /api/v1/agent/select-pair` (POST/DELETE dilindungi `X-Agent-Token`). `onActiveExchangeChanged` membersihkan cache bursa lama & pilihan agen saat pengguna ganti bursa. |
+| Dashboard (`TradingViewModel.kt`, `DashboardScreen.kt`, `FocusCoinCard.kt`, `WatchlistCoinCard.kt`) | Expose `agentSelectedPair`; kartu pair yang dipilih agen ditandai bingkai `TvAmber` 2dp, tint latar halus, dan badge `PILIHAN AGEN` (serta tetap dimunculkan pada tab Semua bila berada di luar halaman pertama). `selectedPair` & `DetailChartScreen` **tidak** diubah saat agen memilih pair. |
+| Ekstensi OMP (`tools/oh-my-pi-extension/index.ts`) | WebSocket `/ws/market-scan` + cache `lastMarketScans`, dan 5 tool baru: `get_market_scan`, `subscribe_market_scan`, `select_agent_pair`, `get_agent_pair`, `clear_agent_pair`. |
+| Smoke & Uji Unit | `SmokeMarketScanProvider.kt`, `tools/bridge-smoke/build.gradle.kts`, `smoke/Main.kt`, `AgentMarketScannerTest.kt`, `AgentBridgeTest.kt`, `AgentBridgeServerTest.kt`, dan penyesuaian assertion merge SSE di `AgentTradingTest.kt` + loopback bind eksplisit untuk kompatibilitas gVisor. |
+
+### 98.2 Bukti & kontrol negatif
+
+- **Unit test bridge** (`gradle :app:testDebugUnitTest --tests "agu.analys.bridge.*"`):
+  **51 uji · 0 gagal · 0 dilewati** (8 kelas: `AgentBridgeServerTest` 12, `AgentTradingTest` 11,
+  `AgentEngineAnalysisTest` 10, `AgentBridgeTest` 4, `AgentMarketScannerTest` 4,
+  `AgentPortfolioPusherTest` 4, `AgentSignalBreakdownTest` 4, `OmpBridgeInstallerTest` 2).
+- **Smoke bridge** (`tools/bridge-smoke`, memakai `AgentHttpServer.kt` & `AgentMarketScanModels.kt`
+  asli): **PASS** (`HTTP`, `market/scan`, `market/pairs`, penolakan 400 lintas bursa, `select-pair`
+  401/400/200/DELETE, `/ws/market-scan` tanpa frame replay ganda, SSE `market_scan`, stop/restart).
+- **Kompilasi Android** (`compile_applet`) & sintaks TypeScript ekstensi (`node --experimental-strip-types --check tools/oh-my-pi-extension/index.ts`): sukses tanpa galat.
+- **Kontrol negatif:** menonaktifkan penjaga `ex == "INDODAX" && quote != "IDR"` pada
+  `AgentMarketScanner.kt` menyebabkan `AgentMarketScannerTest` gagal di assertion isolasi Indodax;
+  setelah dipulihkan, seluruh 51 uji bridge kembali hijau.
+
+### 98.3 Yang **tidak** diklaim
+
+- `serverScore` adalah peringkat kondisi pasar jangka pendek saat scan (momentum, posisi rentang 24j,
+  likuiditas) untuk menyaring kandidat ke evaluasi 3 engine — **bukan** sinyal beli otomatis,
+  bukan jaminan kenaikan harga, dan bukan bukti edge historis.
+- Pilihan agen hanya menandai 1 kartu di Dashboard dan tidak mengeksekusi order apa pun.

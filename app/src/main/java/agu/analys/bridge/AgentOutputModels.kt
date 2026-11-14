@@ -16,8 +16,16 @@ object AgentEventBus {
     private val _portfolio = MutableSharedFlow<AgentPortfolioOutput>(replay = 1, extraBufferCapacity = 10)
     val portfolio = _portfolio.asSharedFlow()
 
+    private val _marketScan = MutableSharedFlow<AgentMarketScanOutput>(replay = 1, extraBufferCapacity = 10)
+    val marketScan = _marketScan.asSharedFlow()
+
+    private val _agentSelection = MutableSharedFlow<AgentPairSelection>(replay = 1, extraBufferCapacity = 10)
+    val agentSelection = _agentSelection.asSharedFlow()
+
     suspend fun emitSignal(s: AgentSignalOutput) = _signals.emit(s)
     suspend fun emitPortfolio(p: AgentPortfolioOutput) = _portfolio.emit(p)
+    suspend fun emitMarketScan(scan: AgentMarketScanOutput) = _marketScan.emit(scan)
+    suspend fun emitAgentSelection(selection: AgentPairSelection) = _agentSelection.emit(selection)
 }
 
 @Serializable

@@ -70,6 +70,15 @@ fun DashboardScreen(
     val newsScreenerState by viewModel.newsScreenerState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val dashboardAllLimit by viewModel.dashboardAllLimit.collectAsState()
+    val agentSelectedPair by viewModel.agentSelectedPair.collectAsState()
+
+    val activeAgentSelection = remember(agentSelectedPair, marketDataSource) {
+        agentSelectedPair?.takeIf {
+            !it.cleared &&
+                it.symbol.isNotBlank() &&
+                it.exchange.equals(marketDataSource.name, ignoreCase = true)
+        }
+    }
 
     val selectedQuickFilter by viewModel.dashboardQuickFilter.collectAsState()
     var currentTab by remember { mutableStateOf(NavTab.WATCHLIST) }
@@ -305,10 +314,26 @@ fun DashboardScreen(
         selectedQuickFilter,
         allVolumeSortedPairs,
         filteredFocusPairs,
-        dashboardAllLimit
+        dashboardAllLimit,
+        activeAgentSelection,
+        marketDataSource
     ) {
         when (selectedQuickFilter) {
-            DashboardQuickFilter.ALL -> allVolumeSortedPairs.take(dashboardAllLimit)
+            DashboardQuickFilter.ALL -> {
+                val basePage = allVolumeSortedPairs.take(dashboardAllLimit)
+                val agentSym = activeAgentSelection?.symbol
+                if (agentSym != null &&
+                    basePage.none { it.symbol.equals(agentSym, ignoreCase = true) } &&
+                    agu.analys.util.DashboardRanking.symbolListed(marketDataSource, agentSym)
+                ) {
+                    val agentPair = allVolumeSortedPairs.firstOrNull {
+                        it.symbol.equals(agentSym, ignoreCase = true)
+                    } ?: TradingPair.fromCustomSymbol(agentSym, marketDataSource.defaultQuoteAsset)
+                    listOf(agentPair) + basePage
+                } else {
+                    basePage
+                }
+            }
             DashboardQuickFilter.STRONG_SIGNAL,
             DashboardQuickFilter.HOLDING,
             DashboardQuickFilter.WATCHLIST -> filteredFocusPairs
@@ -497,6 +522,7 @@ fun DashboardScreen(
                             }
                         }
 
+                        val isAgentPicked = activeAgentSelection?.symbol?.equals(pair.symbol, ignoreCase = true) == true
                         FocusCoinCard(
                             data = FocusCoinCardData(
                                 pair = pair,
@@ -506,7 +532,9 @@ fun DashboardScreen(
                                 badges = effectiveBadges,
                                 isFavorite = favSymbols.contains(pair.symbol),
                                 maxVolume = maxVolume,
-                                isTopPicked = (pair.symbol == displayedPairs.firstOrNull()?.symbol)
+                                isTopPicked = (pair.symbol == displayedPairs.firstOrNull()?.symbol),
+                                isAgentSelected = isAgentPicked,
+                                agentSelectionReason = if (isAgentPicked) activeAgentSelection?.reason else null
                             ),
                             onToggleFavorite = { viewModel.toggleFavorite(pair.symbol) },
                             onClick = {

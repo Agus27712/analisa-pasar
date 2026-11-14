@@ -30,7 +30,8 @@ val copyRealSources = tasks.register<Copy>("copyRealSources") {
             "agu/analys/bridge/AgentHttpServer.kt",
             "agu/analys/bridge/AgentOutputModels.kt",
             "agu/analys/bridge/AgentTradingModels.kt",
-            "agu/analys/bridge/AgentEngineAnalysisModels.kt"
+            "agu/analys/bridge/AgentEngineAnalysisModels.kt",
+            "agu/analys/bridge/AgentMarketScanModels.kt"
         )
     }
     into(layout.buildDirectory.dir("real-src"))

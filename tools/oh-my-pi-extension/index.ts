@@ -31,6 +31,7 @@ type Signal = {
 const BRIDGE_HTTP = "http://127.0.0.1:8765";
 const BRIDGE_WS = "ws://127.0.0.1:8765/ws/signals";
 const BRIDGE_WS_PORTFOLIO = "ws://127.0.0.1:8765/ws/portfolio";
+const BRIDGE_WS_MARKET_SCAN = "ws://127.0.0.1:8765/ws/market-scan";
 
 /**
  * Token Agent Bridge (2026-11-06). Semua rute `/api/v1/trading/*` menuntut header
@@ -96,6 +97,98 @@ type Portfolio = {
 
 const lastPortfolios: Portfolio[] = [];
 let portfolioWs: WebSocket | null = null;
+
+type MarketScanPair = {
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  price: number;
+  change24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  volumeIdr: number;
+  rangePositionPct: number;
+  serverScore: number;
+  momentumTier: string;
+  reasonSummary: string;
+};
+
+type MarketScanCandidate = {
+  rank: number;
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  exchange: string;
+  price: number;
+  change24h: number;
+  volume24h: number;
+  volumeIdr: number;
+  rangePositionPct: number;
+  serverScore: number;
+  momentumTier: string;
+  reasonSummary: string;
+  engineAnalysis?: Record<string, unknown> | null;
+};
+
+type MarketScan = {
+  ts: number;
+  available: boolean;
+  exchange: string;
+  usdtIdrRate: number;
+  totalPairsScanned: number;
+  bullishCount: number;
+  marketSummary: string;
+  topCandidates: MarketScanCandidate[];
+  pairs: MarketScanPair[];
+  error?: string | null;
+  type?: string;
+};
+
+const lastMarketScans: MarketScan[] = [];
+let marketScanWs: WebSocket | null = null;
+
+function pushMarketScan(scan: MarketScan) {
+  lastMarketScans.push(scan);
+  if (lastMarketScans.length > 20) lastMarketScans.shift();
+}
+
+function connectMarketScanWs(logger?: {
+  info?: (m: string, ...a: unknown[]) => void;
+  debug?: (m: string, ...a: unknown[]) => void;
+}) {
+  if (marketScanWs && marketScanWs.readyState === WebSocket.OPEN) return marketScanWs;
+  try {
+    marketScanWs = new WebSocket(BRIDGE_WS_MARKET_SCAN);
+    marketScanWs.onmessage = (ev) => {
+      try {
+        const scan = JSON.parse(String(ev.data)) as MarketScan;
+        pushMarketScan(scan);
+        logger?.debug?.(
+          `[analisa-pasar] market_scan ${scan.exchange}: ${scan.totalPairsScanned} pairs, ${scan.bullishCount} bullish`
+        );
+      } catch {
+        /* frame non-JSON diabaikan */
+      }
+    };
+    marketScanWs.onerror = () => {
+      marketScanWs = null;
+    };
+    marketScanWs.onclose = () => {
+      marketScanWs = null;
+      setTimeout(() => connectMarketScanWs(logger), 3000);
+    };
+  } catch {
+    marketScanWs = null;
+  }
+  return marketScanWs;
+}
+
+function hasMultiplePairsInput(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (!trimmed) return true;
+  return /[,;|+\[\]{}\s]/.test(trimmed);
+}
 
 function pushPortfolio(p: Portfolio) {
   lastPortfolios.push(p);
@@ -932,9 +1025,11 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
   const z = pi.zod;
 
   connectWs(pi.logger);
+  connectMarketScanWs(pi.logger);
 
   pi.on("session_start", async (_event, ctx) => {
     connectWs(pi.logger);
+    connectMarketScanWs(pi.logger);
     ctx.ui.notify("analisa-pasar bridge loaded (WS :8765)", "info");
   });
 
@@ -1075,10 +1170,170 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
           status: res.status,
           body,
           ws_open: wsClient?.readyState === WebSocket.OPEN,
+          market_scan_ws_open: marketScanWs?.readyState === WebSocket.OPEN,
           cache_signals: lastSignals.length,
+          cache_market_scans: lastMarketScans.length,
         });
       } catch (e) {
         return textResult({ ok: false, error: String(e) });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "get_market_scan",
+    label: "Market scan (all active exchange pairs)",
+    description:
+      "Pindai dan baca skor seluruh pair pada bursa yang sedang aktif (Tokocrypto atau Indodax saja, tidak tercampur) " +
+      "dari server bridge. Berisi peringkat serverScore (momentum + posisi rentang 24j + likuiditas IDR) " +
+      "serta evaluasi 3 engine untuk kandidat teratas guna memilih 1 pair terbaik.",
+    parameters: z.object({
+      quote: z.enum(["ALL", "USDT", "IDR"]).optional().describe("Filter quote opsional (ALL, USDT, IDR)"),
+      limit: z.number().min(1).max(500).optional().describe("Batasi jumlah daftar pairs (kosong = semua)"),
+      deepEval: z.number().min(0).max(10).optional().describe("Jumlah kandidat teratas dengan evaluasi 3 engine (default 6)"),
+      refresh: z.boolean().optional().default(false).describe("Paksa scan ulang ke bursa (abaikan cache)"),
+    }),
+    async execute(_toolCallId, params) {
+      try {
+        const useWsCache =
+          !params.refresh &&
+          !params.quote &&
+          params.limit == null &&
+          params.deepEval == null &&
+          lastMarketScans.length > 0;
+        if (useWsCache) {
+          const latest = lastMarketScans[lastMarketScans.length - 1];
+          const ageSec = Math.round((Date.now() - latest.ts) / 1000);
+          if (latest.available && ageSec >= 0 && ageSec <= 30) {
+            return textResult({ source: "websocket_cache", ageSec, ...latest });
+          }
+        }
+        const q = new URLSearchParams();
+        if (params.quote) q.set("quote", params.quote);
+        if (params.limit != null) q.set("limit", String(params.limit));
+        if (params.deepEval != null) q.set("deepEval", String(params.deepEval));
+        if (params.refresh) q.set("refresh", "true");
+        const qs = q.toString();
+        const url = qs ? `${BRIDGE_HTTP}/api/v1/market/scan?${qs}` : `${BRIDGE_HTTP}/api/v1/market/scan`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(45000) });
+        const data = (await res.json()) as MarketScan;
+        if (data.available && !params.quote && params.limit == null) {
+          pushMarketScan(data);
+        }
+        return textResult({ source: "http_server", ...data });
+      } catch (e) {
+        return textResult({
+          available: false,
+          error: `Gagal membaca market scan dari bridge: ${e}. Pastikan sakelar Agent Bridge di aplikasi menyala.`,
+        });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "subscribe_market_scan",
+    label: "Subscribe market scan",
+    description:
+      "Dengarkan emit pemindaian seluruh pair bursa aktif dari /ws/market-scan selama beberapa detik " +
+      "dan kembalikan pembaruan terbaru + cache.",
+    parameters: z.object({
+      seconds: z.number().min(3).max(120).default(15).describe("Durasi tunggu detik (3-120)"),
+    }),
+    async execute(_toolCallId, params) {
+      const seconds = params.seconds ?? 15;
+      connectMarketScanWs(pi.logger);
+      const before = lastMarketScans.length;
+      await new Promise((r) => setTimeout(r, seconds * 1000));
+      const fresh = lastMarketScans.slice(before);
+      const latest = fresh.length > 0 ? fresh[fresh.length - 1] : lastMarketScans[lastMarketScans.length - 1];
+      return textResult({
+        waited_seconds: seconds,
+        ws_open: marketScanWs?.readyState === WebSocket.OPEN,
+        new_count: fresh.length,
+        cache_total: lastMarketScans.length,
+        latest: latest ?? null,
+        updates: fresh,
+      });
+    },
+  });
+
+  pi.registerTool({
+    name: "select_agent_pair",
+    label: "Select 1 pair on Dashboard",
+    description:
+      "Tandai TEPAT 1 pair pilihan agen di daftar Dashboard aplikasi (warna & badge PILIHAN AGEN), " +
+      "tanpa memindah layar Detail Coin. Ditolak jika lebih dari 1 pair atau tidak terdaftar di bursa aktif.",
+    parameters: z.object({
+      symbol: z.string().describe("Tepat 1 simbol pair pada bursa aktif, contoh: BTCUSDT atau BTCIDR"),
+      reason: z.string().optional().describe("Alasan singkat mengapa pair ini dipilih"),
+    }),
+    async execute(_toolCallId, params) {
+      if (hasMultiplePairsInput(params.symbol || "")) {
+        return textResult({
+          success: false,
+          message: `Input harus tepat 1 simbol pair (tidak boleh kosong atau multi-pair): '${params.symbol}'`,
+        });
+      }
+      try {
+        const token = await bridgeToken();
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/agent/select-pair`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(token ? { "X-Agent-Token": token } : {}) },
+          body: JSON.stringify({ symbol: params.symbol.trim(), reason: params.reason ?? null }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.status === 401) {
+          return textResult({
+            success: false,
+            message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN).`,
+          });
+        }
+        return textResult(await res.json());
+      } catch (e) {
+        return textResult({ success: false, message: `Gagal memilih pair di bridge: ${e}` });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "get_agent_pair",
+    label: "Get active agent pair",
+    description: "Baca pair tunggal yang sedang ditandai agen di Dashboard",
+    parameters: z.object({}),
+    async execute() {
+      try {
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/agent/select-pair`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        return textResult(await res.json());
+      } catch (e) {
+        return textResult({ success: false, message: `Gagal membaca pilihan pair agen: ${e}` });
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "clear_agent_pair",
+    label: "Clear agent pair mark",
+    description: "Hapus tanda PILIHAN AGEN dari daftar Dashboard",
+    parameters: z.object({}),
+    async execute() {
+      try {
+        const token = await bridgeToken();
+        const res = await fetch(`${BRIDGE_HTTP}/api/v1/agent/select-pair`, {
+          method: "DELETE",
+          headers: token ? { "X-Agent-Token": token } : undefined,
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.status === 401) {
+          return textResult({
+            success: false,
+            message: `Ditolak 401: token bridge salah/belum diinstal (${TOKEN_FILE} atau env ANALISA_PASAR_TOKEN).`,
+          });
+        }
+        return textResult(await res.json());
+      } catch (e) {
+        return textResult({ success: false, message: `Gagal menghapus pilihan pair agen: ${e}` });
       }
     },
   });
@@ -1174,7 +1429,12 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     name: "place_buy_order",
     label: "Place buy order",
     description:
-      "Kirim order BELI ke Analisa Pasar (Tokocrypto/Paper) atas instruksi pengguna terkonfirmasi. Format: quoteAmount (nominal USDT/IDR) atau quantity.",
+     "Kirim order BELI ke Analisa Pasar (Tokocrypto/Paper). WAJIB panggil " +
+       "get_latest_signal atau subscribe_signals dulu" +
+         "jika: tidak ada sinyal (404/'no signal yet'), action bukan 'BUY', " +
+           "technical.volumeSpike bukan true, atau tp1/sl kosong. Jangan percaya " +
+             "confidence saja — confidence tinggi tanpa volumeSpike tetap ditolak. " +
+               "Format: quoteAmount (nominal USDT/IDR) atau quantity.",
     parameters: z.object({
       symbol: z.string().describe("Simbol pair, contoh: BTCUSDT, ETHUSDT, BTCIDR"),
       quoteAmount: z.number().optional().describe("Nominal beli dalam quote currency (contoh: 15 USDT atau 100000 IDR)"),

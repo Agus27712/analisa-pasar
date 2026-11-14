@@ -231,6 +231,8 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
     val positionVersion: StateFlow<Long> = positionCoordinator.positionVersion
     val priceAlerts: StateFlow<List<PriceAlert>> = positionCoordinator.priceAlerts
     val mtfState: StateFlow<Map<String, Map<Timeframe, MtfStatus>>> = agu.analys.util.MtfCacheManager.mtfState
+    val agentSelectedPair: StateFlow<agu.analys.bridge.AgentPairSelection?> =
+        agu.analys.bridge.AgentMarketScanProvider.selection
 
     // Local settings states for quick engine integration
     private val _strategyMode = MutableStateFlow(prefs.strategyMode)
@@ -492,6 +494,11 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         prefs.marketDataSource = source
         MtfCacheManager.updateExchange(source.name)
         watchlistViewModel.reloadForDataSource(source)
+        if (previousSource != source) {
+            agu.analys.bridge.AgentOutputBridge
+                .getInstance(getApplication())
+                .onActiveExchangeChanged(source.name)
+        }
 
         // 3. Muat dynamic symbols Tokocrypto jika beralih ke Tokocrypto
         if (source == MarketDataSource.TOKOCRYPTO) {

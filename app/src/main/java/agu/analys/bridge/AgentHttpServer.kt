@@ -171,9 +171,8 @@ class AgentHttpServer(private val context: Context) {
             // Pendorong portofolio hidup bersama server: agen yang baru tersambung tidak
             // perlu menunggu sinyal pertama untuk menerima snapshot posisi.
             runCatching { AgentOutputBridge.getInstance(context).startPortfolioPush() }
-            // Pendorong portofolio hidup bersama server: agen yang baru tersambung tidak
-            // perlu menunggu sinyal pertama untuk menerima snapshot posisi.
-                        AppLogManager.info("AgentHttpServer", "Bridge V2 started $HOST:$PORT (polling+ws+sse)")
+            runCatching { AgentOutputBridge.getInstance(context).startMarketScanPush() }
+            AppLogManager.info("AgentHttpServer", "Bridge V2 started $HOST:$PORT (polling+ws+sse)")
         } catch (t: Throwable) {
             server = null
             val reason = "${t.javaClass.simpleName}: ${t.message ?: "tanpa pesan"}"
@@ -235,9 +234,11 @@ class AgentHttpServer(private val context: Context) {
                       "service":"analisa-pasar-agent-bridge-v3",
                       "polling": ["/signals/latest","/signals/history?limit=50","/portfolio","/health"],
                       "analysis": ["/api/v1/engine/analysis?symbol=BTCUSDT","/api/v1/market/analysis?symbol=BTCUSDT"],
+                      "market_scan": ["/api/v1/market/scan","/api/v1/market/pairs"],
+                      "agent_selection": ["GET /api/v1/agent/select-pair","POST /api/v1/agent/select-pair","DELETE /api/v1/agent/select-pair"],
                       "trading": ["POST /api/v1/trading/buy","POST /api/v1/trading/sell","POST /api/v1/trading/cancel","GET /api/v1/trading/orders/{id}"],
-                      "trading_auth": "Semua rute /api/v1/trading/* menuntut header X-Agent-Token (berkas token diinstal bersama ekstensi OMP).",
-                      "push": ["/ws/signals (WebSocket)", "/ws/portfolio (WebSocket)", "/events (SSE: signal + portfolio)"]
+                      "trading_auth": "Semua rute tulis (/api/v1/trading/* dan POST/DELETE /api/v1/agent/select-pair) menuntut header X-Agent-Token.",
+                      "push": ["/ws/signals (WebSocket)", "/ws/portfolio (WebSocket)", "/ws/market-scan (WebSocket)", "/events (SSE: signal + portfolio + market_scan + agent_selection)"]
                     }
                     """.trimIndent(),
                     ContentType.Application.Json
@@ -300,6 +301,99 @@ class AgentHttpServer(private val context: Context) {
                 val exchange = call.request.queryParameters["exchange"]
                 val analysis = AgentEngineAnalysisProvider.engineAnalysis(context, symbol, exchange)
                 call.respondText(json.encodeToString(analysis), ContentType.Application.Json)
+            }
+
+            // --- PEMINDAIAN SELURUH PAIR BURSA AKTIF + SKOR SERVER ---
+            get("/api/v1/market/scan") {
+                val exchange = call.request.queryParameters["exchange"]
+                val quote = call.request.queryParameters["quote"]
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 0
+                val deepEval = call.request.queryParameters["deepEval"]?.toIntOrNull() ?: 6
+                val refresh = call.request.queryParameters["refresh"]?.toBooleanStrictOrNull() ?: false
+                val scan = AgentMarketScanProvider.scanActiveExchange(
+                    context = context,
+                    requestedExchange = exchange,
+                    quoteFilter = quote,
+                    limit = limit,
+                    deepEvalCount = deepEval,
+                    forceRefresh = refresh
+                )
+                val status = if (!scan.available && !exchange.isNullOrBlank()) {
+                    HttpStatusCode.BadRequest
+                } else {
+                    HttpStatusCode.OK
+                }
+                call.respondText(json.encodeToString(scan), ContentType.Application.Json, status)
+            }
+            get("/api/v1/market/pairs") {
+                val exchange = call.request.queryParameters["exchange"]
+                val quote = call.request.queryParameters["quote"]
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 0
+                val refresh = call.request.queryParameters["refresh"]?.toBooleanStrictOrNull() ?: false
+                val scan = AgentMarketScanProvider.scanActiveExchange(
+                    context = context,
+                    requestedExchange = exchange,
+                    quoteFilter = quote,
+                    limit = limit,
+                    deepEvalCount = 0,
+                    forceRefresh = refresh
+                )
+                val resp = AgentMarketPairsResponse(
+                    ts = scan.ts,
+                    available = scan.available,
+                    exchange = scan.exchange,
+                    usdtIdrRate = scan.usdtIdrRate,
+                    totalPairs = scan.pairs.size,
+                    pairs = scan.pairs,
+                    error = scan.error
+                )
+                val status = if (!scan.available && !exchange.isNullOrBlank()) {
+                    HttpStatusCode.BadRequest
+                } else {
+                    HttpStatusCode.OK
+                }
+                call.respondText(json.encodeToString(resp), ContentType.Application.Json, status)
+            }
+
+            // --- PILIHAN TUNGGAL 1 PAIR AGEN (TANDAI DI DASHBOARD, TANPA PINDAH DETAIL) ---
+            route("/api/v1/agent/select-pair") {
+                get {
+                    val cur = AgentMarketScanProvider.currentSelection()
+                    val resp = AgentPairSelectionResponse(
+                        success = true,
+                        message = if (cur != null) {
+                            "Pair pilihan agen aktif: ${cur.symbol} (${cur.exchange})."
+                        } else {
+                            "Belum ada pair pilihan agen."
+                        },
+                        selection = cur
+                    )
+                    call.respondText(json.encodeToString(resp), ContentType.Application.Json)
+                }
+                post {
+                    if (!call.requireAgentToken(bridgeToken)) return@post
+                    try {
+                        val body = call.receiveText()
+                        val req = json.decodeFromString<AgentPairSelectionRequest>(body)
+                        val resp = AgentMarketScanProvider.selectPair(context, req.symbol, req.reason)
+                        call.respondText(
+                            json.encodeToString(resp),
+                            ContentType.Application.Json,
+                            if (resp.success) HttpStatusCode.OK else HttpStatusCode.BadRequest
+                        )
+                    } catch (e: Exception) {
+                        call.respondText(
+                            """{"success":false,"message":"Payload pilihan pair tidak valid: ${e.message}"}""",
+                            ContentType.Application.Json,
+                            HttpStatusCode.BadRequest
+                        )
+                    }
+                }
+                delete {
+                    if (!call.requireAgentToken(bridgeToken)) return@delete
+                    val resp = AgentMarketScanProvider.clearPair(context)
+                    call.respondText(json.encodeToString(resp), ContentType.Application.Json, HttpStatusCode.OK)
+                }
             }
 
             // --- AGENT-ASSISTED TRADING ENDPOINTS (V3) ---
@@ -414,7 +508,12 @@ class AgentHttpServer(private val context: Context) {
                         flush()
                         // Sinyal dan portofolio diberi label per jenis supaya client bisa
                         // menyaring tanpa membuka koneksi kedua (2026-11-06).
-                        merge(AgentEventBus.signals, AgentEventBus.portfolio).collect { item ->
+                        merge(
+                            AgentEventBus.signals,
+                            AgentEventBus.portfolio,
+                            AgentEventBus.marketScan,
+                            AgentEventBus.agentSelection
+                        ).collect { item ->
                             when (item) {
                                 is AgentSignalOutput -> {
                                     write("event: signal\n")
@@ -422,6 +521,14 @@ class AgentHttpServer(private val context: Context) {
                                 }
                                 is AgentPortfolioOutput -> {
                                     write("event: portfolio\n")
+                                    write("data: ${json.encodeToString(item)}\n\n")
+                                }
+                                is AgentMarketScanOutput -> {
+                                    write("event: market_scan\n")
+                                    write("data: ${json.encodeToString(item)}\n\n")
+                                }
+                                is AgentPairSelection -> {
+                                    write("event: agent_selection\n")
                                     write("data: ${json.encodeToString(item)}\n\n")
                                 }
                             }
@@ -443,6 +550,16 @@ class AgentHttpServer(private val context: Context) {
                     }
                 } catch (e: Exception) {
                     AppLogManager.error("AgentWS", "WS portfolio error", e)
+                }
+            }
+            // 4. WebSocket pemindaian seluruh pair bursa aktif — replay 1 dari SharedFlow + push emit baru
+            webSocket("/ws/market-scan") {
+                try {
+                    AgentEventBus.marketScan.collect { scan ->
+                        send(Frame.Text(json.encodeToString(scan)))
+                    }
+                } catch (e: Exception) {
+                    AppLogManager.error("AgentWS", "WS market-scan error", e)
                 }
             }
         }

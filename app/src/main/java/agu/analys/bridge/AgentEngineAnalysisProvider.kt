@@ -95,9 +95,24 @@ object AgentEngineAnalysisProvider {
             )
         }
 
+        return evaluateWithKnownTick(context, norm, source, prefetchedTick = null)
+    }
+
+    /**
+     * Evaluasi tiga mode untuk simbol & bursa yang sudah tervalidasi.
+     * Dipakai bersama oleh [engineAnalysis] dan pemindai pasar (`AgentMarketScanProvider`)
+     * agar kandidat pemindaian memakai pipeline `ModeSignalEvaluator` + `FEE_TRUTH` yang sama persis.
+     */
+    internal suspend fun evaluateWithKnownTick(
+        context: Context,
+        norm: String,
+        source: MarketDataSource,
+        prefetchedTick: agu.analys.model.MarketTick? = null
+    ): AgentEngineAnalysis {
+        val prefs = prefsFor(context)
         return try {
             coroutineScope {
-                val tickerJob = async {
+                val tickerJob = if (prefetchedTick != null) null else async {
                     withTimeoutOrNull(FETCH_TIMEOUT_MS) { fetchTicker(source, norm) }
                 }
                 val h1Job = async {
@@ -122,7 +137,7 @@ object AgentEngineAnalysisProvider {
                     withTimeoutOrNull(FETCH_TIMEOUT_MS) { fetchOrderBook(source, norm) }
                 }
 
-                val tick = tickerJob.await()
+                val tick = prefetchedTick ?: tickerJob?.await()
                 val price = tick?.price ?: 0.0
                 if (price <= 0.0) {
                     return@coroutineScope AgentEngineAnalysis(

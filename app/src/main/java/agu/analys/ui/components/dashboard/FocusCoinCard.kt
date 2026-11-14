@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -19,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,7 +55,9 @@ data class FocusCoinCardData(
     val badges: List<CoinBadge>,
     val isFavorite: Boolean,
     val maxVolume: Double = 1.0,
-    val isTopPicked: Boolean = false
+    val isTopPicked: Boolean = false,
+    val isAgentSelected: Boolean = false,
+    val agentSelectionReason: String? = null
 )
 
 @Composable
@@ -88,13 +92,17 @@ fun FocusCoinCard(
     val primaryCyan = TvCyan
     val textSec = TvTextSecondary
     val borderCol = TvBorder
-    val cardBg = TvCardBackground
-
-    // Border: Glow Neon Cyan pada kartu BUY utama, border theme pada lainnya
-    val cardBorder = if (isStrongSignal || data.isTopPicked) {
-        BorderStroke(1.2.dp, primaryCyan)
+    val cardBg = if (data.isAgentSelected) {
+        lerp(TvCardBackground, TvAmber, 0.08f)
     } else {
-        BorderStroke(1.dp, borderCol)
+        TvCardBackground
+    }
+
+    // Border: Pilihan agen pakai emas (TvAmber 2dp), kartu BUY utama pakai cyan, lainnya border theme
+    val cardBorder = when {
+        data.isAgentSelected -> BorderStroke(2.dp, TvAmber)
+        isStrongSignal || data.isTopPicked -> BorderStroke(1.2.dp, primaryCyan)
+        else -> BorderStroke(1.dp, borderCol)
     }
 
     val changeColor = when {
@@ -123,6 +131,50 @@ fun FocusCoinCard(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
+            if (data.isAgentSelected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .background(TvAmber.copy(alpha = 0.16f), RoundedCornerShape(6.dp))
+                            .border(1.dp, TvAmber.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                            .testTag("agent_selected_badge_${data.pair.symbol}"),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Pilihan Agen",
+                            tint = TvAmber,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "PILIHAN AGEN",
+                            color = TvAmber,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                    val reason = data.agentSelectionReason?.trim().orEmpty()
+                    if (reason.isNotEmpty()) {
+                        Text(
+                            text = reason,
+                            color = TvTextSecondary,
+                            fontSize = 10.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
             // ================= Baris 1: Symbol & Nama | Live Price & Change 24h =================
             Row(
                 modifier = Modifier.fillMaxWidth(),

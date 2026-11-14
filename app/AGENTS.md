@@ -124,7 +124,23 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   (dipakai `AgentOutputModels`), `AgentTradingCommandHandler` + `AgentTradingModels.kt` (rute
   tulis `/api/v1/trading/*`), dan assertion nama service di `smoke/Main.kt`
   (`agent-bridge-v2` → `analisa-pasar-agent-bridge-v3`). Rute/field baru di
-  `AgentHttpServer.kt` **wajib** punya assertion smoke atau dib.stub dengan jelas.
+  `AgentHttpServer.kt` **wajib** punya assertion smoke atau di-stub dengan jelas.
+- **Pemindaian seluruh pair bursa aktif + penandaan 1 pair agen di Dashboard (2026-11-14).**
+  `GET /api/v1/market/scan` (`/api/v1/market/pairs`), `ws://127.0.0.1:8765/ws/market-scan`, dan
+  SSE `event: market_scan` + `event: agent_selection` memindai seluruh pair **hanya pada bursa
+  yang sedang aktif** (`TOKOCRYPTO` atau `INDODAX`, tidak pernah mencampur dua bursa) lewat
+  `AgentMarketScanner` (skor momentum, posisi rentang 24j, likuiditas IDR, penalti overextension
+  >15%) lalu evaluasi `ModeSignalEvaluator` pada 6 kandidat teratas. Penjaga wajib:
+  - pergantian bursa aktif di `TradingViewModel.setMarketDataSource` memanggil
+    `AgentOutputBridge.onActiveExchangeChanged` (menghapus cache/pilihan lama dan memicu scan
+    ulang bursa baru);
+  - `POST /api/v1/agent/select-pair` (bertoken `X-Agent-Token`) dan `DELETE /api/v1/agent/select-pair`
+    mengelola **maksimal 1 pair** di bursa aktif (`AgentMarketScanner.parseSingleSymbolInput`
+    menolak kosong/multi-pair);
+  - pilihan agen **hanya menandai kartu koin di Dashboard** (`PILIHAN AGEN` / bingkai `TvAmber`),
+    **tidak** mengubah `selectedPair` maupun memindah layar ke `DetailCoinScreen`.
+  Penjaga: `AgentMarketScannerTest` (4 uji), `AgentBridgeTest` (4 uji), `AgentBridgeServerTest`
+  (12 uji), dan `tools/bridge-smoke` (`SmokeMarketScanProvider`).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

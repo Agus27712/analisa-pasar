@@ -49,6 +49,27 @@ fun main() {
         check(get("/api/v1/engine/analysis?symbol=BTCUSDT").contains("SMOKE_FIXTURE"))
         check(get("/api/v1/engine/analysis?symbol=BTCUSDT").contains("BULLISH_CONFLUENCE"))
         check(get("/api/v1/market/analysis?symbol=BTCUSDT").contains("SMOKE_FIXTURE"))
+        check(get("/api/v1/market/scan").contains("SMOKE_SCAN_FIXTURE"))
+        check(get("/api/v1/market/pairs").contains("BTCUSDT"))
+        val mismatchReq = request("/api/v1/market/scan?exchange=INDODAX")
+        val mismatchRes = client.send(mismatchReq, HttpResponse.BodyHandlers.ofString())
+        check(mismatchRes.statusCode() == 400) { "expected 400 for cross-exchange request, got ${mismatchRes.statusCode()}" }
+
+        fun postSelect(body: String, token: String?): HttpResponse<String> {
+            val builder = HttpRequest.newBuilder(URI("http://127.0.0.1:8765/api/v1/agent/select-pair"))
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+            if (token != null) builder.header(AgentHttpServer.HEADER_TOKEN, token)
+            return client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
+        }
+        val smokeToken = agu.analys.util.AppPreferences(context).agentBridgeToken
+        check(postSelect("""{"symbol":"BTCUSDT"}""", null).statusCode() == 401)
+        check(postSelect("""{"symbol":"BTCUSDT,ETHUSDT"}""", smokeToken).statusCode() == 400)
+        val okSelect = postSelect("""{"symbol":"BTCUSDT","reason":"smoke"}""", smokeToken)
+        check(okSelect.statusCode() == 200 && okSelect.body().contains("BTCUSDT"))
+        check(get("/api/v1/agent/select-pair").contains("BTCUSDT"))
+
         val messages = LinkedBlockingQueue<String>()
         ws = client.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5)).buildAsync(
             URI("ws://127.0.0.1:8765/ws/signals"), object : WebSocket.Listener {
@@ -63,27 +84,70 @@ fun main() {
             }
         ).get(10, TimeUnit.SECONDS)
         check(messages.poll(10, TimeUnit.SECONDS)?.contains("SNAPSHOT") == true)
+
+        val scanMessages = LinkedBlockingQueue<String>()
+        var scanWs: WebSocket? = null
+        val scanSnapshot = runBlocking { AgentMarketScanProvider.scanActiveExchange(context) }
+        runBlocking { AgentEventBus.emitMarketScan(scanSnapshot) }
+        scanWs = client.newWebSocketBuilder().connectTimeout(Duration.ofSeconds(5)).buildAsync(
+            URI("ws://127.0.0.1:8765/ws/market-scan"), object : WebSocket.Listener {
+                private val text = StringBuilder()
+                override fun onOpen(socket: WebSocket) { socket.request(1) }
+                override fun onText(socket: WebSocket, data: CharSequence, last: Boolean): CompletableFuture<*>? {
+                    text.append(data)
+                    if (last) { scanMessages.add(text.toString()); text.setLength(0) }
+                    socket.request(1)
+                    return null
+                }
+            }
+        ).get(10, TimeUnit.SECONDS)
+        check(scanMessages.poll(10, TimeUnit.SECONDS)?.contains("SMOKE_SCAN_FIXTURE") == true)
+
         val stream = client.send(request("/events"), HttpResponse.BodyHandlers.ofInputStream())
         check(stream.statusCode() == 200)
         check(stream.headers().firstValue("Content-Type").orElse("").contains("text/event-stream"))
         sse = stream.body()
         val reader = sse.bufferedReader()
         fun line(): String = CompletableFuture.supplyAsync { reader.readLine() }.get(10, TimeUnit.SECONDS)
+        fun awaitSseEvent(expectedEvent: String, expectedContains: String) {
+            var currentEvent = ""
+            repeat(60) {
+                val l = line()
+                when {
+                    l.startsWith("event: ") -> currentEvent = l.removePrefix("event: ").trim()
+                    l.startsWith("data: ") -> {
+                        val payload = l.removePrefix("data: ")
+                        if (currentEvent == expectedEvent && payload.contains(expectedContains)) return
+                    }
+                    l.isEmpty() -> currentEvent = ""
+                }
+            }
+            error("SSE event '$expectedEvent' containing '$expectedContains' did not arrive")
+        }
         check(line() == "event: ping")
         check(line().startsWith("data: "))
         check(line().isEmpty())
         runBlocking { AgentEventBus.emitSignal(bridge.snapshot.copy(symbol = "PUSH")) }
         check(messages.poll(10, TimeUnit.SECONDS)?.contains("PUSH") == true)
-        check(line() == "event: signal")
-        check(line().contains("PUSH"))
+        awaitSseEvent("signal", "PUSH")
+        runBlocking { AgentEventBus.emitMarketScan(scanSnapshot.copy(marketSummary = "PUSH_SCAN")) }
+        check(scanMessages.poll(10, TimeUnit.SECONDS)?.contains("PUSH_SCAN") == true)
+        awaitSseEvent("market_scan", "PUSH_SCAN")
+        scanWs.abort()
         ws.abort(); ws = null
         sse.close(); sse = null
+        val delReq = HttpRequest.newBuilder(URI("http://127.0.0.1:8765/api/v1/agent/select-pair"))
+            .timeout(Duration.ofSeconds(10))
+            .header(AgentHttpServer.HEADER_TOKEN, smokeToken)
+            .DELETE()
+            .build()
+        check(client.send(delReq, HttpResponse.BodyHandlers.ofString()).statusCode() == 200)
         server.stop()
         check(!server.isRunning)
         runBlocking { server.awaitSettled(20_000) }
         server.start()
         awaitHealth()
-        println("PASS: actual AgentHttpServer HTTP, file/history, engine analysis, WebSocket snapshot/push, SSE ping/push, stop/restart")
+        println("PASS: actual AgentHttpServer HTTP, file/history, engine analysis, market scan, agent select-pair, WebSocket snapshot/push, SSE ping/push, stop/restart")
     } finally {
         ws?.abort()
         sse?.close()
