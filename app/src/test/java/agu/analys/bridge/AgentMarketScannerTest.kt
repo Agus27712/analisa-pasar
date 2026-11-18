@@ -130,5 +130,17 @@ class AgentMarketScannerTest {
         )
         val sig2 = AgentMarketScannerPusher.signature(scanIndodax)
         assertTrue(AgentMarketScannerPusher.shouldEmit(sig1, sig2, nowMs = 2_000L, lastEmitMs = 1_000L))
+
+        // Sensitivitas live: perubahan harga 0.3% atau skor 0.5 poin wajib memicu emit baru
+        val movedPrice = scanToko.copy(topCandidates = listOf(cand.copy(price = 68_220.0)))
+        val sigPrice = AgentMarketScannerPusher.signature(movedPrice)
+        assertTrue(AgentMarketScannerPusher.shouldEmit(sig1, sigPrice, nowMs = 2_600L, lastEmitMs = 1_000L))
+
+        val movedScore = scanToko.copy(topCandidates = listOf(cand.copy(serverScore = 84.5)))
+        val sigScore = AgentMarketScannerPusher.signature(movedScore)
+        assertTrue(AgentMarketScannerPusher.shouldEmit(sig1, sigScore, nowMs = 2_600L, lastEmitMs = 1_000L))
+
+        assertTrue(AgentMarketScannerPusher.LIVE_DEBOUNCE_MS in 1_000L..3_000L)
+        assertTrue(AgentMarketScannerPusher.SCAN_INTERVAL_MS < 60_000L)
     }
 }

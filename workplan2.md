@@ -6196,3 +6196,46 @@ memindah layar Detail Coin secara otomatis.
   likuiditas) untuk menyaring kandidat ke evaluasi 3 engine — **bukan** sinyal beli otomatis,
   bukan jaminan kenaikan harga, dan bukan bukti edge historis.
 - Pilihan agen hanya menandai 1 kartu di Dashboard dan tidak mengeksekusi order apa pun.
+
+---
+
+## 99. Push WebSocket live (`/ws/signals` & `/ws/market-scan`) event-driven tanpa menunggu 60 detik (2026-11-18)
+
+Atas instruksi owner: feed WebSocket live dibuat event-driven agar agen di OMP langsung melihat
+pembaruan sinyal engine (`HOLD`, transisi stage, perubahan skor) maupun hasil scan pasar live
+bursa aktif tanpa menunggu jendela 60 detik, dengan debounce `1,5 detik` untuk menjaga efisiensi
+jaringan dan baterai.
+
+### 99.1 Yang ditambahkan / diubah
+
+| Bagian | Rincian |
+|---|---|
+| Penjaga sinyal live (`AgentLiveSignalPusher.kt`) | Kelas murni Kotlin dengan evaluasi `EMIT_IMMEDIATE` (sinyal pertama, ganti simbol/mode/bursa, perubahan `action`/`scalpingStage`/`lifecycleState`/`setup`/`regime`/MTF, atau lompatan `confidence`/`scalpingScore` >= 2 poin), `DEFER_DEBOUNCE` + trailing flush pada `1.500 ms` untuk pergeseran halus (harga >= 0,05%, skor ±1, alasan), `SKIP` bila identik sebelum heartbeat `60.000 ms`. |
+| Kontrak & breakdown (`AgentOutputModels.kt`) | Tambah field opsional `scalpingStage: String? = null` dan `scalpingScore: Int? = null` di `TechnicalBreakdown` serta diteruskan dari `AgentSignalBreakdown.build(...)` (tetap menjaga `rsi` dan `macd` bernilai `null`). |
+| Feed scan pasar live (`AgentMarketScanner.kt`, `AgentMarketScanProvider.kt`) | `LIVE_DEBOUNCE_MS = 1.500 ms`, interval fallback turun dari `60.000 ms` ke `20.000 ms`, cache analisis Tahap 2 `20.000 ms`, dan jalur in-memory `scanFromLiveTicks(context, expectedExchange, liveTicks)` agar Tahap 1 tidak melakukan request HTTP ticker tambahan saat tick dashboard live tersedia (tetap menegakkan isolasi `TOKOCRYPTO` vs `INDODAX`). `signature()` kini sensitif terhadap perubahan skor 0,5 poin, pergerakan harga ~0,1% (skala logaritmik), jumlah bullish, dan `scalpStage`. |
+| Bridge & WS Server (`AgentOutputBridge.kt`, `AgentHttpServer.kt`) | Tambah `emitLiveSignal`, `onLiveDashboardTicks`, dan `onStrategyModeChanged`. `emitSignal` memancarkan semua pembaruan (termasuk `HOLD`) ke `latest.json` dan `AgentEventBus.signals`, sedangkan `signals.jsonl` tetap hanya mencatat non-`HOLD`. `AgentHttpServer` memeriksa `replayCache` pada `/ws/signals` agar snapshot awal tidak dikirim ganda. |
+| Sinkronisasi ViewModel (`TradingViewModelSync.kt`, `TradingViewModel.kt`) | Pisahkan pencatatan Room (`action != HOLD && > 15s`) dari push WS live (`emitAgentSignalIfEnabled` meneruskan seluruh status non-offline termasuk `HOLD`, `scalpingStage`, `scalpingScore`, `lifecycleState`). Aliran `dashboardTicks` memicu `onLiveDashboardTicks` dan pergantian `setStrategyMode` memicu `onStrategyModeChanged`. |
+| Ekstensi OMP (`tools/oh-my-pi-extension/index.ts`) | Tangkap `scalpingStage`/`scalpingScore`, lacak `lastActionableSignal` terpisah dari `lastSignals` live, tampilkan sinyal `HOLD` live + sinyal aksi terakhir pada `get_latest_signal`, dan pastikan `connectWs`/`connectMarketScanWs` aktif dengan batas kesegaran cache WS `<= 15 detik` di `get_market_scan`. |
+| Uji unit (`AgentLiveSignalPusherTest`, `AgentMarketScannerTest`, `AgentSignalBreakdownTest`, `AgentBridgeServerTest`) | Tambah `AgentLiveSignalPusherTest` (4 uji), perluasan `AgentMarketScannerTest`, `AgentSignalBreakdownTest` (+1 uji stage/score), dan uji Robolectric `/ws/signals` di `AgentBridgeServerTest` (+1 uji frame `HOLD` live membawa `scalpingStage` & `scalpingScore`). |
+
+### 99.2 Bukti & kontrol negatif
+
+- **Unit test bridge** (`gradle :app:testDebugUnitTest --tests "agu.analys.bridge.*"`):
+  **57 uji · 0 gagal · 0 dilewati** di 9 kelas (`AgentBridgeServerTest` 13, `AgentTradingTest` 11,
+  `AgentEngineAnalysisTest` 10, `AgentSignalBreakdownTest` 5, `AgentBridgeTest` 4,
+  `AgentLiveSignalPusherTest` 4, `AgentMarketScannerTest` 4, `AgentPortfolioPusherTest` 4,
+  `OmpBridgeInstallerTest` 2).
+- **Smoke bridge** (`tools/bridge-smoke`): **PASS** (`HTTP`, `/signals/*`, `/api/v1/engine/analysis`,
+  `/api/v1/market/scan`, `/ws/signals`, `/ws/market-scan`, SSE `/events`, `stop/restart`).
+- **Kompilasi Android** (`compile_applet`) & sintaks TypeScript ekstensi (`node --experimental-strip-types --check tools/oh-my-pi-extension/index.ts`): sukses tanpa galat.
+- **Kontrol negatif:** menonaktifkan pemeriksaan `previous.scalpingStage != next.scalpingStage` pada
+  `AgentLiveSignalPusher.isImmediateTransition` menyebabkan `AgentLiveSignalPusherTest` gagal di
+  `AgentLiveSignalPusherTest.kt:53` (1 dari 4 uji gagal); setelah dipulihkan, seluruh 57 uji
+  bridge dan kompilasi Android kembali hijau.
+
+### 99.3 Yang **tidak** diklaim
+
+- Push live WebSocket hanya mengirim pembaruan kondisi engine dan peringkat scan pasar lebih
+  cepat — **bukan** perbaikan winrate/expectancy, bukan jaminan profit, dan tidak mengaktifkan
+  eksekusi order otomatis apa pun.
+

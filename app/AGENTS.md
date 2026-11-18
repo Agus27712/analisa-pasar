@@ -140,7 +140,27 @@ Yang **tidak boleh** dilakukan lagi tanpa instruksi eksplisit owner:
   - pilihan agen **hanya menandai kartu koin di Dashboard** (`PILIHAN AGEN` / bingkai `TvAmber`),
     **tidak** mengubah `selectedPair` maupun memindah layar ke `DetailCoinScreen`.
   Penjaga: `AgentMarketScannerTest` (4 uji), `AgentBridgeTest` (4 uji), `AgentBridgeServerTest`
-  (12 uji), dan `tools/bridge-smoke` (`SmokeMarketScanProvider`).
+  (13 uji), dan `tools/bridge-smoke` (`SmokeMarketScanProvider`).
+- **Push WebSocket live berbasis perubahan data & debounce 1,5 detik (2026-11-18).** Baik
+  `/ws/signals` maupun `/ws/market-scan` memancarkan pembaruan secara *event-driven* tanpa menunggu
+  siklus 60 detik:
+  - `/ws/signals` + `latest.json` menerima **semua** pembaruan live (termasuk `HOLD`, transisi
+    `scalpingStage`/`lifecycleState`, serta skor `scalpingScore`/`confidence`) lewat
+    `AgentOutputBridge.emitLiveSignal` & `AgentLiveSignalPusher`: transisi kritis (`action`,
+    `scalpingStage`, `lifecycleState`, `setup`, `regime`, MTF, atau lompatan skor >= 2 poin)
+    dipancarkan **seketika**, sedangkan pergeseran halus (harga >= 0,05%, skor ±1, alasan)
+    di-debounce `1.500 ms` dengan *trailing flush* dan heartbeat maksimum `60.000 ms`.
+  - `signals.jsonl` dan Room `SignalLogRepository` tetap **hanya mencatat sinyal aksi
+    (`action != HOLD`)** supaya histori jurnal tidak penuh baris `HOLD`.
+  - `/ws/market-scan` langsung menghitung ulang Tahap 1 di memori dari `dashboardTicks` bursa
+    aktif lewat `AgentOutputBridge.onLiveDashboardTicks` + `AgentMarketScanProvider.scanFromLiveTicks`
+    (debounce `1.500 ms`), memakai cache deep-analysis Tahap 2 (`20.000 ms`), dan fallback refresh
+    penuh setiap `20.000 ms` (`REST_REFRESH_GUARD_MS = 45.000 ms`). Isolasi ketat bursa aktif
+    tetap wajib dijaga (`requestedExchange != activeExchange` diabaikan/ditolak).
+  - `AgentHttpServer` memeriksa `AgentEventBus.signals.replayCache` agar snapshot awal `/ws/signals`
+    tidak terkirim ganda saat sudah tersimpan di replay bus.
+  Penjaga: `AgentLiveSignalPusherTest` (4 uji), `AgentMarketScannerTest` (4 uji),
+  `AgentSignalBreakdownTest` (5 uji), dan `AgentBridgeServerTest` (13 uji).
 
 ## Aturan turunan dari audit notifikasi (batch 1 & 2, 2026-10-16)
 

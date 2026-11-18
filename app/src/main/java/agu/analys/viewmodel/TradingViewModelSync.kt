@@ -652,13 +652,22 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 scalpingScoreCategory = transition.signal.scalpingScoreCategory,
                 scalpingRegime = transition.signal.scalpingRegime
             )
+        }
 
+        // Feed live WebSocket (/ws/signals): semua transisi (termasuk HOLD, perubahan stage,
+        // dan perubahan skor) tetap dipancarkan melalui AgentLiveSignalPusher.
+        val liveEntry = SignalSymbolAttribution.entryPrice(
+            signalEntryPrice = transition.signal.entryPrice,
+            tickPrice = marketDataCoordinator.dashboardTicks.value[transition.symbol]?.price
+                ?: marketDataCoordinator.currentTick.value?.price
+        )
+        if (!transition.signal.isOfflineMode && (liveEntry > 0.0 || transition.signal.entryPrice > 0.0)) {
             emitAgentSignalIfEnabled(
                 symbol = transition.symbol,
                 action = transition.signal.action.name,
                 mode = transition.mode.name,
                 confidence = transition.signal.confidence,
-                entryPrice = transition.signal.entryPrice,
+                entryPrice = liveEntry,
                 tp1 = transition.signal.targetPrice1,
                 tp2 = transition.signal.targetPrice2,
                 stopLoss = transition.signal.stopLoss,
@@ -666,7 +675,12 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
                 orderbookPressure = transition.signal.scalpingScoreCategory.ifBlank { null },
                 mtf = transition.signal.mtf,
                 scalpingSetup = transition.signal.scalpingSetup,
-                scalpingRegime = transition.signal.scalpingRegime
+                scalpingRegime = transition.signal.scalpingRegime,
+                scalpingStage = transition.signal.scalpingStage.name,
+                scalpingScore = transition.signal.scalpingScore.takeIf {
+                    transition.mode == agu.analys.config.StrategyMode.SCALPING || it > 0
+                },
+                lifecycleState = transition.newState.name
             )
         }
 
@@ -704,6 +718,9 @@ fun TradingViewModel.initSubscriptionsAndPolling() {
         marketDataCoordinator.dashboardTicks.collect { ticks ->
             if (ticks.isNotEmpty()) {
                 marketViewModel.updateDashboardTicks(ticks)
+                agu.analys.bridge.AgentOutputBridge
+                    .getInstance(getApplication())
+                    .onLiveDashboardTicks(prefs.marketDataSource.name, ticks)
             }
             delay(500L) // batasi maks 2x/detik; nilai terbaru tetap terkirim (StateFlow conflated)
         }
@@ -815,16 +832,21 @@ fun TradingViewModel.listenToEngineSignals() {
     viewModelScope.launch {
         engine.signalState.collect { signal ->
             val now = System.currentTimeMillis()
+            // J4 — simbol jurnal adalah simbol yang **dievaluasi engine**, bukan pair yang
+            // sedang dibuka.
+            val journalSymbol = SignalSymbolAttribution.journalSymbol(
+                signalSymbol = signal.marketSymbol,
+                selectedSymbol = selectedPair.value.symbol
+            )
+            if (!SignalSymbolAttribution.isRecordable(journalSymbol)) return@collect
+            val resolvedPrice = SignalSymbolAttribution.entryPrice(
+                signalEntryPrice = signal.entryPrice,
+                tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
+                    ?: marketDataCoordinator.currentTick.value?.price
+            )
+
+            // 1. Jurnal Room & riwayat UI: hanya sinyal aksi (non-HOLD) dengan jeda 15 detik.
             if (signal.action != SignalAction.HOLD && now - lastSavedSignalTimestamp > 15000L) {
-                // J4 — simbol jurnal adalah simbol yang **dievaluasi engine**, bukan pair yang
-                // sedang dibuka. `selectPair()` mengganti pair lebih dulu, sedangkan `signalState`
-                // masih berisi hasil pair lama sampai tick berikutnya; menstempel
-                // `selectedPair` di sini membuat entry/TP/SL/confidence BTC tercatat sebagai ETH.
-                val journalSymbol = SignalSymbolAttribution.journalSymbol(
-                    signalSymbol = signal.marketSymbol,
-                    selectedSymbol = selectedPair.value.symbol
-                )
-                if (!SignalSymbolAttribution.isRecordable(journalSymbol)) return@collect
                 lastSavedSignalTimestamp = now
                 val list = _signalHistory.value.toMutableList()
                 list.add(0, signal.copy(marketSymbol = journalSymbol))
@@ -835,28 +857,26 @@ fun TradingViewModel.listenToEngineSignals() {
                     symbol = journalSymbol, action = signal.action.name,
                     strategyMode = strategyMode.value.name, confidence = signal.confidence,
                     sentiment = signal.sentiment.name,
-                    // J4 — harga fallback juga harus milik simbol jurnal, bukan tick pair yang
-                    // kebetulan sedang dibuka.
-                    entryPrice = SignalSymbolAttribution.entryPrice(
-                        signalEntryPrice = signal.entryPrice,
-                        tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
-                    ),
+                    entryPrice = resolvedPrice,
                     targetPrice1 = signal.targetPrice1, targetPrice2 = signal.targetPrice2, stopLoss = signal.stopLoss,
                     reasoning = signal.reasoning.joinToString(" • "), scalpingStage = signal.scalpingStage.name,
                     exchange = prefs.marketDataSource.name,
                     scalpingSetup = signal.scalpingSetup, scalpingScore = signal.scalpingScore,
                     scalpingScoreCategory = signal.scalpingScoreCategory, scalpingRegime = signal.scalpingRegime
                 )
+            }
 
+            // 2. Feed WebSocket live (/ws/signals): pancarkan semua pembaruan (HOLD, stage, skor,
+            //    BUY/SELL) secara event-driven melalui AgentLiveSignalPusher (instan saat transisi,
+            //    debounce 1,5 detik saat tick halus).
+            if (!signal.isOfflineMode && (resolvedPrice > 0.0 || signal.entryPrice > 0.0)) {
+                val activeMode = strategyMode.value
                 emitAgentSignalIfEnabled(
                     symbol = journalSymbol,
                     action = signal.action.name,
-                    mode = strategyMode.value.name,
+                    mode = activeMode.name,
                     confidence = signal.confidence,
-                    entryPrice = SignalSymbolAttribution.entryPrice(
-                        signalEntryPrice = signal.entryPrice,
-                        tickPrice = marketDataCoordinator.dashboardTicks.value[journalSymbol]?.price
-                    ),
+                    entryPrice = resolvedPrice,
                     tp1 = signal.targetPrice1,
                     tp2 = signal.targetPrice2,
                     stopLoss = signal.stopLoss,
@@ -864,7 +884,12 @@ fun TradingViewModel.listenToEngineSignals() {
                     orderbookPressure = signal.scalpingScoreCategory.ifBlank { null },
                     mtf = signal.mtf,
                     scalpingSetup = signal.scalpingSetup,
-                    scalpingRegime = signal.scalpingRegime
+                    scalpingRegime = signal.scalpingRegime,
+                    scalpingStage = signal.scalpingStage.name,
+                    scalpingScore = signal.scalpingScore.takeIf {
+                        activeMode == agu.analys.config.StrategyMode.SCALPING || it > 0
+                    },
+                    lifecycleState = signal.lifecycleState.name
                 )
             }
         }
@@ -884,7 +909,10 @@ fun TradingViewModel.emitAgentSignalIfEnabled(
     orderbookPressure: String? = null,
     mtf: agu.analys.model.ScalpingMtfSnapshot? = null,
     scalpingSetup: String? = null,
-    scalpingRegime: String? = null
+    scalpingRegime: String? = null,
+    scalpingStage: String? = null,
+    scalpingScore: Int? = null,
+    lifecycleState: String = ""
 ) {
     val bridge = agu.analys.bridge.AgentOutputBridge.getInstance(getApplication())
     if (!bridge.isEnabled()) return
@@ -909,7 +937,9 @@ fun TradingViewModel.emitAgentSignalIfEnabled(
             orderbookPressure = orderbookPressure,
             mtf = mtf,
             scalpingSetup = scalpingSetup,
-            scalpingRegime = scalpingRegime
+            scalpingRegime = scalpingRegime,
+            scalpingStage = scalpingStage,
+            scalpingScore = scalpingScore
         ),
         feeTruth = agu.analys.bridge.FeeTruthInfo(
             feeRate = feeRate,
@@ -917,5 +947,5 @@ fun TradingViewModel.emitAgentSignalIfEnabled(
             exchange = currentEx.lowercase()
         )
     )
-    bridge.emitSignal(out)
+    bridge.emitLiveSignal(out, lifecycleState = lifecycleState)
 }

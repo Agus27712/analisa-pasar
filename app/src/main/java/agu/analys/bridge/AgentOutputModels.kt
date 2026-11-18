@@ -62,7 +62,9 @@ data class TechnicalBreakdown(
     val mtfStatusTitle: String? = null,
     val mtfCheckpointsOk: Int? = null,
     val scalpingSetup: String? = null,
-    val scalpingRegime: String? = null
+    val scalpingRegime: String? = null,
+    val scalpingStage: String? = null,
+    val scalpingScore: Int? = null
 )
 
 /**
@@ -80,14 +82,20 @@ object AgentSignalBreakdown {
         orderbookPressure: String?,
         mtf: ScalpingMtfSnapshot? = null,
         scalpingSetup: String? = null,
-        scalpingRegime: String? = null
+        scalpingRegime: String? = null,
+        scalpingStage: String? = null,
+        scalpingScore: Int? = null
     ): TechnicalBreakdown {
+        val cleanStage = scalpingStage?.takeIf { it.isNotBlank() }
+        val cleanScore = scalpingScore?.takeIf { it >= 0 }
         val mtfNyata = mtf?.takeIf { it != ScalpingMtfSnapshot() }
         if (mtfNyata == null) {
             return TechnicalBreakdown(
                 orderbookPressure = orderbookPressure,
                 scalpingSetup = scalpingSetup?.takeIf { it.isNotBlank() },
-                scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() }
+                scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() },
+                scalpingStage = cleanStage,
+                scalpingScore = cleanScore
             )
         }
         val volumeConfirmed = mtfNyata.checkpoints
@@ -106,7 +114,9 @@ object AgentSignalBreakdown {
                 .takeIf { it.isNotBlank() && it != "BELUM TERSEDIA" },
             mtfCheckpointsOk = mtfNyata.completedCount.takeIf { it > 0 },
             scalpingSetup = scalpingSetup?.takeIf { it.isNotBlank() },
-            scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() }
+            scalpingRegime = scalpingRegime?.takeIf { it.isNotBlank() },
+            scalpingStage = cleanStage,
+            scalpingScore = cleanScore
         )
     }
 }

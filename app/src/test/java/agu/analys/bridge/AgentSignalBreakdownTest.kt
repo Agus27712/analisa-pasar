@@ -98,4 +98,20 @@ class AgentSignalBreakdownTest {
         // statusTitle kosong atau "BELUM TERSEDIA" tidak boleh diteruskan ke agen
         assertNull(t.mtfStatusTitle)
     }
+
+    @Test
+    fun `scalpingStage dan scalpingScore ikut diteruskan untuk feed HOLD live`() {
+        val t = AgentSignalBreakdown.build(
+            orderbookPressure = "WATCH",
+            mtf = mtfNyata(),
+            scalpingSetup = "BREAKOUT_RETEST",
+            scalpingRegime = "TRENDING_UP",
+            scalpingStage = "WAIT_PULLBACK",
+            scalpingScore = 64
+        )
+        assertNull(t.rsi)
+        assertNull(t.macd)
+        assertEquals("WAIT_PULLBACK", t.scalpingStage)
+        assertEquals(64, t.scalpingScore)
+    }
 }

@@ -34,7 +34,8 @@ import kotlinx.coroutines.sync.withPermit
  */
 object AgentMarketScanProvider {
 
-    private const val CACHE_TTL_MS = 45_000L
+    private const val CACHE_TTL_MS = 20_000L
+    private const val DEEP_ANALYSIS_CACHE_TTL_MS = 20_000L
     private const val DEFAULT_DEEP_EVAL = 6
     private const val MAX_DEEP_EVAL = 10
 
@@ -43,7 +44,13 @@ object AgentMarketScanProvider {
         val output: AgentMarketScanOutput
     )
 
+    private data class CachedDeepAnalysis(
+        val ts: Long,
+        val analysis: AgentEngineAnalysis
+    )
+
     private val cacheByExchange = ConcurrentHashMap<String, CachedScan>()
+    private val deepAnalysisCache = ConcurrentHashMap<String, CachedDeepAnalysis>()
 
     private val _selection = MutableStateFlow<AgentPairSelection?>(null)
     val selection: StateFlow<AgentPairSelection?> = _selection.asStateFlow()
@@ -67,10 +74,17 @@ object AgentMarketScanProvider {
     fun onExchangeChanged(newActiveExchange: String) {
         val normEx = newActiveExchange.trim().uppercase()
         cacheByExchange.keys.filter { it != normEx }.forEach { cacheByExchange.remove(it) }
+        deepAnalysisCache.keys.filter { !it.startsWith("$normEx|") }.forEach { deepAnalysisCache.remove(it) }
         val current = _selection.value
         if (current != null && !current.exchange.equals(normEx, ignoreCase = true)) {
             _selection.value = null
         }
+    }
+
+    /** Hapus cache scan/analisis agar perubahan mode strategi segera tercermin pada push berikutnya. */
+    fun invalidateScanCache() {
+        cacheByExchange.clear()
+        deepAnalysisCache.clear()
     }
 
     /**
@@ -147,6 +161,63 @@ object AgentMarketScanProvider {
         )
     }
 
+    /**
+     * Pindai langsung di memori dari snapshot ticker live (`MarketDataCoordinator.dashboardTicks`)
+     * tanpa melakukan request HTTP ticker seluruh pasar. Evaluasi Tahap 2 memakai ulang cache
+     * analisis (<20 detik) agar responsif secara event-driven namun tetap hemat jaringan.
+     */
+    suspend fun scanFromLiveTicks(
+        context: Context,
+        expectedExchange: String,
+        liveTicks: Collection<MarketTick>
+    ): AgentMarketScanOutput {
+        val prefs = prefsFor(context)
+        val activeSource = prefs.marketDataSource
+        if (!activeSource.name.equals(expectedExchange.trim(), ignoreCase = true)) {
+            return AgentMarketScanOutput(
+                ts = System.currentTimeMillis(),
+                available = false,
+                exchange = activeSource.name,
+                error = "Tick live berasal dari ${expectedExchange.uppercase()}, sedangkan bursa aktif adalah ${activeSource.name}."
+            )
+        }
+        return try {
+            if (!ExchangeRateManager.isRateAvailable()) {
+                ExchangeRateManager.refresh()
+            }
+            val usdtIdrRate = ExchangeRateManager.currentRate()
+            val filteredTicks = filterRankableTicks(activeSource, liveTicks)
+            buildScanFromTicks(context, activeSource, filteredTicks, usdtIdrRate).also { scan ->
+                if (scan.available && prefs.marketDataSource == activeSource) {
+                    cacheByExchange[activeSource.name] = CachedScan(System.currentTimeMillis(), scan)
+                }
+            }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            AgentMarketScanOutput(
+                ts = System.currentTimeMillis(),
+                available = false,
+                exchange = activeSource.name,
+                error = "Pemindaian live ${activeSource.name} gagal: ${t.javaClass.simpleName}: ${t.message ?: "tanpa pesan"}"
+            )
+        }
+    }
+
+    private fun filterRankableTicks(source: MarketDataSource, rawTicks: Collection<MarketTick>): List<MarketTick> {
+        return when (source) {
+            MarketDataSource.TOKOCRYPTO -> rawTicks
+                .distinctBy { it.symbol.uppercase().replace("_", "") }
+                .filter { DashboardRanking.isRankable(MarketDataSource.TOKOCRYPTO, it) }
+            MarketDataSource.INDODAX -> rawTicks
+                .distinctBy { it.symbol.uppercase().replace("_", "") }
+                .filter {
+                    DashboardRanking.symbolListed(MarketDataSource.INDODAX, it.symbol) &&
+                        DashboardRanking.isRankable(MarketDataSource.INDODAX, it)
+                }
+        }
+    }
+
     private suspend fun runFreshScan(
         context: Context,
         source: MarketDataSource
@@ -161,17 +232,14 @@ object AgentMarketScanProvider {
             val ticks: List<MarketTick> = when (source) {
                 MarketDataSource.TOKOCRYPTO -> {
                     val rankings = TokocryptoMarketService.fetchMarketRankings(limit = 500)
-                    rankings.allTicks.values
-                        .filter { DashboardRanking.isRankable(MarketDataSource.TOKOCRYPTO, it) }
+                    filterRankableTicks(MarketDataSource.TOKOCRYPTO, rankings.allTicks.values)
                 }
                 MarketDataSource.INDODAX -> {
                     IndodaxSymbolRepository.ensurePairsLoaded(false)
-                    IndodaxMarketService.fetchAllMarketTicks().values
-                        .distinctBy { it.symbol.uppercase().replace("_", "") }
-                        .filter {
-                            DashboardRanking.symbolListed(MarketDataSource.INDODAX, it.symbol) &&
-                                DashboardRanking.isRankable(MarketDataSource.INDODAX, it)
-                        }
+                    filterRankableTicks(
+                        MarketDataSource.INDODAX,
+                        IndodaxMarketService.fetchAllMarketTicks().values
+                    )
                 }
             }
 
@@ -185,86 +253,7 @@ object AgentMarketScanProvider {
                 )
             }
 
-            val tickBySymbol = ticks.associateBy {
-                AgentEngineAnalysisMapper.normalizeSymbol(it.symbol) ?: it.symbol.uppercase()
-            }
-            val scoredPairs = AgentMarketScanner.scoreAllPairs(
-                exchange = source.name,
-                ticks = ticks,
-                usdtIdrRate = usdtIdrRate
-            )
-
-            if (scoredPairs.isEmpty()) {
-                return AgentMarketScanOutput(
-                    ts = nowMs,
-                    available = false,
-                    exchange = source.name,
-                    usdtIdrRate = usdtIdrRate,
-                    error = "Tidak ada pair layak yang lolos filter kelayakan ${source.name}."
-                )
-            }
-
-            // Tahap 2: evaluasi mendalam `ModeSignalEvaluator` pada kandidat terbaik
-            // yang tidak overextended (atau peringkat teratas jika semua sedang netral).
-            val deepTargets = scoredPairs
-                .filter { it.momentumTier != "OVEREXTENDED" }
-                .ifEmpty { scoredPairs }
-                .take(DEFAULT_DEEP_EVAL)
-
-            val sem = Semaphore(3)
-            val evaluatedCandidates = coroutineScope {
-                deepTargets.mapIndexed { idx, item ->
-                    async {
-                        sem.withPermit {
-                            val analysis = runCatching {
-                                AgentEngineAnalysisProvider.evaluateWithKnownTick(
-                                    context = context,
-                                    norm = item.symbol,
-                                    source = source,
-                                    prefetchedTick = tickBySymbol[item.symbol]
-                                )
-                            }.getOrNull()
-                            AgentMarketScanCandidate(
-                                rank = idx + 1,
-                                symbol = item.symbol,
-                                baseAsset = item.baseAsset,
-                                quoteAsset = item.quoteAsset,
-                                exchange = source.name,
-                                price = item.price,
-                                change24h = item.change24h,
-                                volume24h = item.volume24h,
-                                volumeIdr = item.volumeIdr,
-                                rangePositionPct = item.rangePositionPct,
-                                serverScore = item.serverScore,
-                                momentumTier = item.momentumTier,
-                                reasonSummary = item.reasonSummary,
-                                engineAnalysis = analysis
-                            )
-                        }
-                    }
-                }.awaitAll()
-            }
-
-            val bullishCount = scoredPairs.count {
-                it.momentumTier == "STRONG_UP" || it.momentumTier == "BUILDING_UP"
-            }
-            val topDesc = evaluatedCandidates.take(3).joinToString(", ") {
-                val bias = it.engineAnalysis?.overallBias ?: it.momentumTier
-                "${it.symbol} (skor ${it.serverScore}, $bias)"
-            }
-            val summary = "${source.name}: ${scoredPairs.size} pair dipindai, $bullishCount berbias naik. Teratas: $topDesc"
-
-            AgentMarketScanOutput(
-                ts = System.currentTimeMillis(),
-                available = true,
-                exchange = source.name,
-                usdtIdrRate = usdtIdrRate,
-                totalPairsScanned = scoredPairs.size,
-                bullishCount = bullishCount,
-                marketSummary = summary,
-                topCandidates = evaluatedCandidates,
-                pairs = scoredPairs
-            )
+            buildScanFromTicks(context, source, ticks, usdtIdrRate)
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -275,6 +264,119 @@ object AgentMarketScanProvider {
                 error = "Pemindaian pasar ${source.name} gagal: ${t.javaClass.simpleName}: ${t.message ?: "tanpa pesan"}"
             )
         }
+    }
+
+    private suspend fun buildScanFromTicks(
+        context: Context,
+        source: MarketDataSource,
+        ticks: List<MarketTick>,
+        usdtIdrRate: Double
+    ): AgentMarketScanOutput {
+        val nowMs = System.currentTimeMillis()
+        if (ticks.isEmpty()) {
+            return AgentMarketScanOutput(
+                ts = nowMs,
+                available = false,
+                exchange = source.name,
+                usdtIdrRate = usdtIdrRate,
+                error = "Data ticker pasar ${source.name} kosong."
+            )
+        }
+
+        val tickBySymbol = ticks.associateBy {
+            AgentEngineAnalysisMapper.normalizeSymbol(it.symbol) ?: it.symbol.uppercase()
+        }
+        val scoredPairs = AgentMarketScanner.scoreAllPairs(
+            exchange = source.name,
+            ticks = ticks,
+            usdtIdrRate = usdtIdrRate
+        )
+
+        if (scoredPairs.isEmpty()) {
+            return AgentMarketScanOutput(
+                ts = nowMs,
+                available = false,
+                exchange = source.name,
+                usdtIdrRate = usdtIdrRate,
+                error = "Tidak ada pair layak yang lolos filter kelayakan ${source.name}."
+            )
+        }
+
+        // Tahap 2: evaluasi mendalam `ModeSignalEvaluator` pada kandidat terbaik
+        // yang tidak overextended (memanfaatkan cache 20 detik agar push live cepat & hemat API).
+        val deepTargets = scoredPairs
+            .filter { it.momentumTier != "OVEREXTENDED" }
+            .ifEmpty { scoredPairs }
+            .take(DEFAULT_DEEP_EVAL)
+
+        val sem = Semaphore(3)
+        val evaluatedCandidates = coroutineScope {
+            deepTargets.mapIndexed { idx, item ->
+                async {
+                    val cacheKey = "${source.name}|${item.symbol}"
+                    val cachedDeep = deepAnalysisCache[cacheKey]
+                        ?.takeIf { System.currentTimeMillis() - it.ts < DEEP_ANALYSIS_CACHE_TTL_MS }
+                        ?.analysis
+                        ?.copy(price = item.price)
+
+                    val analysis = cachedDeep ?: sem.withPermit {
+                        runCatching {
+                            AgentEngineAnalysisProvider.evaluateWithKnownTick(
+                                context = context,
+                                norm = item.symbol,
+                                source = source,
+                                prefetchedTick = tickBySymbol[item.symbol]
+                            )
+                        }.getOrNull()?.also { freshAnalysis ->
+                            if (freshAnalysis.available) {
+                                deepAnalysisCache[cacheKey] = CachedDeepAnalysis(
+                                    ts = System.currentTimeMillis(),
+                                    analysis = freshAnalysis
+                                )
+                            }
+                        }
+                    }
+
+                    AgentMarketScanCandidate(
+                        rank = idx + 1,
+                        symbol = item.symbol,
+                        baseAsset = item.baseAsset,
+                        quoteAsset = item.quoteAsset,
+                        exchange = source.name,
+                        price = item.price,
+                        change24h = item.change24h,
+                        volume24h = item.volume24h,
+                        volumeIdr = item.volumeIdr,
+                        rangePositionPct = item.rangePositionPct,
+                        serverScore = item.serverScore,
+                        momentumTier = item.momentumTier,
+                        reasonSummary = item.reasonSummary,
+                        engineAnalysis = analysis
+                    )
+                }
+            }.awaitAll()
+        }
+
+        val bullishCount = scoredPairs.count {
+            it.momentumTier == "STRONG_UP" || it.momentumTier == "BUILDING_UP"
+        }
+        val topDesc = evaluatedCandidates.take(3).joinToString(", ") {
+            val bias = it.engineAnalysis?.overallBias ?: it.momentumTier
+            "${it.symbol} (skor ${it.serverScore}, $bias)"
+        }
+        val summary = "${source.name}: ${scoredPairs.size} pair dipindai, $bullishCount berbias naik. Teratas: $topDesc"
+
+        return AgentMarketScanOutput(
+            ts = System.currentTimeMillis(),
+            available = true,
+            exchange = source.name,
+            usdtIdrRate = usdtIdrRate,
+            totalPairsScanned = scoredPairs.size,
+            bullishCount = bullishCount,
+            marketSummary = summary,
+            topCandidates = evaluatedCandidates,
+            pairs = scoredPairs
+        )
     }
 
     /**

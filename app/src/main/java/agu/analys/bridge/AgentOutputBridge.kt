@@ -2,9 +2,11 @@ package agu.analys.bridge
 
 import android.content.Context
 import android.os.Environment
+import agu.analys.model.MarketTick
 import agu.analys.util.AppLogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -12,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 class AgentOutputBridge(private val context: Context) {
@@ -48,11 +51,77 @@ class AgentOutputBridge(private val context: Context) {
         kotlinx.coroutines.channels.Channel.CONFLATED
     )
 
+    /** State sinyal live per `"EXCHANGE|SYMBOL|MODE"` untuk aturan transisi instan & debounce 1,5s. */
+    private val liveSignalLock = Any()
+    private val lastFingerprintByKey = ConcurrentHashMap<String, AgentLiveSignalPusher.LiveSignalFingerprint>()
+    private val lastEmitMsByKey = ConcurrentHashMap<String, Long>()
+    private val deferredSignalJobs = ConcurrentHashMap<String, Job>()
+    private val pendingDeferredSignals = ConcurrentHashMap<String, Pair<AgentSignalOutput, AgentLiveSignalPusher.LiveSignalFingerprint>>()
+
+    /** Snapshot tick live terbaru milik bursa aktif untuk pemindaian event-driven `/ws/market-scan`. */
+    @Volatile
+    private var latestLiveTicks: Pair<String, Map<String, MarketTick>>? = null
+
+    @Volatile
+    private var liveScanDebounceJob: Job? = null
+
+    @Volatile
+    private var lastRestRefreshMs: Long = 0L
+
 	fun isEnabled(): Boolean {
 		return runCatching {
 			prefs.isAgentOutputEnabled
 		}.getOrDefault(false)
 	}
+
+    /**
+     * Pancarkan sinyal live (termasuk `HOLD`, perubahan `scalpingStage`, dan perubahan skor)
+     * secara event-driven: instan saat transisi bermakna, atau debounce 1,5 detik untuk
+     * pembaruan halus agar `/ws/signals` langsung memperlihatkan kondisi mesin tanpa banjir burst.
+     */
+    fun emitLiveSignal(signal: AgentSignalOutput, lifecycleState: String = "") {
+        if (!isEnabled()) return
+        val fp = AgentLiveSignalPusher.fingerprintOf(signal, lifecycleState)
+        var immediatePayload: AgentSignalOutput? = null
+        synchronized(liveSignalLock) {
+            val prev = lastFingerprintByKey[fp.key]
+            val lastAt = lastEmitMsByKey[fp.key] ?: 0L
+            val now = System.currentTimeMillis()
+            when (AgentLiveSignalPusher.evaluate(prev, fp, now, lastAt)) {
+                AgentLiveSignalPusher.Decision.EMIT_IMMEDIATE,
+                AgentLiveSignalPusher.Decision.EMIT_DEBOUNCED -> {
+                    deferredSignalJobs.remove(fp.key)?.cancel()
+                    pendingDeferredSignals.remove(fp.key)
+                    lastFingerprintByKey[fp.key] = fp
+                    lastEmitMsByKey[fp.key] = now
+                    immediatePayload = signal
+                }
+                AgentLiveSignalPusher.Decision.DEFER_DEBOUNCE -> {
+                    pendingDeferredSignals[fp.key] = signal to fp
+                    if (deferredSignalJobs[fp.key]?.isActive != true) {
+                        val waitMs = (AgentLiveSignalPusher.DEBOUNCE_MS - (now - lastAt))
+                            .coerceIn(100L, AgentLiveSignalPusher.DEBOUNCE_MS)
+                        deferredSignalJobs[fp.key] = scope.launch {
+                            delay(waitMs)
+                            var flushed: AgentSignalOutput? = null
+                            synchronized(liveSignalLock) {
+                                val pending = pendingDeferredSignals.remove(fp.key)
+                                deferredSignalJobs.remove(fp.key)
+                                if (pending != null) {
+                                    lastFingerprintByKey[fp.key] = pending.second
+                                    lastEmitMsByKey[fp.key] = System.currentTimeMillis()
+                                    flushed = pending.first
+                                }
+                            }
+                            flushed?.let { emitSignal(it) }
+                        }
+                    }
+                }
+                AgentLiveSignalPusher.Decision.SKIP -> Unit
+            }
+        }
+        immediatePayload?.let { emitSignal(it) }
+    }
 
     fun emitSignal(signal: AgentSignalOutput) {
         if (!isEnabled()) {
@@ -65,13 +134,16 @@ class AgentOutputBridge(private val context: Context) {
         try {
             latestRef.set(signal)
 
-            // 1. Simpan ke berkas lokal (signals.jsonl + latest.json) untuk fallback polling HTTP
+            // 1. Simpan latest.json untuk semua status live (termasuk HOLD/stage);
+            //    signals.jsonl hanya mencatat sinyal aksi non-HOLD agar riwayat tidak penuh HOLD.
             scope.launch {
                 runCatching {
-                    val line = jsonCompact.encodeToString(signal)
-                    File(outputDir, "signals.jsonl").appendText(line + "\n")
                     File(outputDir, "latest.json").writeText(jsonPretty.encodeToString(signal))
-                    maintainRolling(1000)
+                    if (!signal.action.equals("HOLD", ignoreCase = true)) {
+                        val line = jsonCompact.encodeToString(signal)
+                        File(outputDir, "signals.jsonl").appendText(line + "\n")
+                        maintainRolling(1000)
+                    }
                 }.onFailure { err ->
                     AppLogManager.error("AgentBridge", "Gagal simpan sinyal ke berkas lokal", err)
                 }
@@ -82,7 +154,7 @@ class AgentOutputBridge(private val context: Context) {
                 AgentEventBus.emitSignal(signal)
             }
 
-            AppLogManager.info("AgentBridge", "EMIT ${signal.symbol} ${signal.confidence}% -> file+ws")
+            AppLogManager.info("AgentBridge", "EMIT ${signal.symbol} ${signal.action} ${signal.confidence}% -> file+ws")
         } catch (e: Exception) {
             AppLogManager.error("AgentBridge", "emitSignal failed", e)
         }
@@ -152,11 +224,52 @@ class AgentOutputBridge(private val context: Context) {
     }
 
     /**
+     * Terima aliran tick dashboard live dari `MarketDataCoordinator` (hanya bursa aktif)
+     * dan jadwalkan pemindaian in-memory dengan debounce 1,5 detik tanpa menunggu jeda 60 detik.
+     */
+    fun onLiveDashboardTicks(exchange: String, ticks: Map<String, MarketTick>) {
+        if (!isEnabled() || ticks.isEmpty()) return
+        val normEx = exchange.trim().uppercase()
+        val activeEx = runCatching { prefs.marketDataSource.name }.getOrDefault("")
+        if (normEx != activeEx) return
+        latestLiveTicks = normEx to ticks
+        if (liveScanDebounceJob?.isActive != true) {
+            liveScanDebounceJob = scope.launch {
+                delay(AgentMarketScannerPusher.LIVE_DEBOUNCE_MS)
+                forceMarketScanTrigger.trySend(Unit)
+            }
+        }
+    }
+
+    /** Dipanggil saat pengguna mengganti mode strategi agar kandidat scan & sinyal segera disegarkan. */
+    fun onStrategyModeChanged() {
+        AgentMarketScanProvider.invalidateScanCache()
+        liveScanDebounceJob?.cancel()
+        liveScanDebounceJob = null
+        synchronized(liveSignalLock) {
+            lastFingerprintByKey.clear()
+            lastEmitMsByKey.clear()
+        }
+        forceMarketScanTrigger.trySend(Unit)
+    }
+
+    /**
      * Dipanggil saat pengguna mengganti bursa aktif di aplikasi: bersihkan cache bursa lama
      * dan picu pemindaian ulang khusus bursa baru agar agenfeed tidak mencampur data bursa.
      */
     fun onActiveExchangeChanged(newExchange: String) {
         val normEx = newExchange.trim().uppercase()
+        latestLiveTicks = null
+        liveScanDebounceJob?.cancel()
+        liveScanDebounceJob = null
+        lastRestRefreshMs = 0L
+        synchronized(liveSignalLock) {
+            deferredSignalJobs.values.forEach { it.cancel() }
+            deferredSignalJobs.clear()
+            pendingDeferredSignals.clear()
+            lastFingerprintByKey.clear()
+            lastEmitMsByKey.clear()
+        }
         AgentMarketScanProvider.onExchangeChanged(normEx)
         scope.launch {
             runCatching {
@@ -226,6 +339,10 @@ class AgentOutputBridge(private val context: Context) {
 
     /**
      * Mulai pendorong pemindaian seluruh pair ke agenfeed (idempoten, khusus bursa aktif).
+     *
+     * Berjalan event-driven saat `onLiveDashboardTicks` memberi pembaruan (debounce 1,5 detik)
+     * menggunakan skor in-memory + cache evaluasi Tahap 2, dengan cadangan interval pendek
+     * [AgentMarketScannerPusher.SCAN_INTERVAL_MS] jika tidak ada aliran tick live.
      */
     fun startMarketScanPush() {
         if (!marketScanPushStarted.compareAndSet(false, true)) return
@@ -237,10 +354,28 @@ class AgentOutputBridge(private val context: Context) {
                 runCatching {
                     if (isEnabled()) {
                         val activeExAtStart = prefs.marketDataSource.name
-                        val scan = AgentMarketScanProvider.scanActiveExchange(
-                            context = context,
-                            forceRefresh = true
-                        )
+                        val nowLoop = System.currentTimeMillis()
+                        val liveSnapshot = latestLiveTicks?.takeIf {
+                            it.first == activeExAtStart &&
+                                it.second.isNotEmpty() &&
+                                (nowLoop - lastRestRefreshMs < AgentMarketScannerPusher.REST_REFRESH_GUARD_MS)
+                        }
+                        val scan = if (liveSnapshot != null) {
+                            AgentMarketScanProvider.scanFromLiveTicks(
+                                context = context,
+                                expectedExchange = activeExAtStart,
+                                liveTicks = liveSnapshot.second.values
+                            )
+                        } else {
+                            AgentMarketScanProvider.scanActiveExchange(
+                                context = context,
+                                forceRefresh = true
+                            ).also { fresh ->
+                                if (fresh.available) {
+                                    lastRestRefreshMs = System.currentTimeMillis()
+                                }
+                            }
+                        }
                         val activeExNow = prefs.marketDataSource.name
                         if (scan.available && scan.exchange == activeExAtStart && activeExNow == activeExAtStart) {
                             if (lastEmittedExchange != scan.exchange) {
@@ -264,7 +399,10 @@ class AgentOutputBridge(private val context: Context) {
                 }
             }
         }
-        AppLogManager.info("AgentBridge", "Market scan push dimulai (interval ${AgentMarketScannerPusher.SCAN_INTERVAL_MS} ms)")
+        AppLogManager.info(
+            "AgentBridge",
+            "Market scan push live dimulai (debounce ${AgentMarketScannerPusher.LIVE_DEBOUNCE_MS} ms, cadangan ${AgentMarketScannerPusher.SCAN_INTERVAL_MS} ms)"
+        )
     }
 
     fun getDir(): File = outputDir

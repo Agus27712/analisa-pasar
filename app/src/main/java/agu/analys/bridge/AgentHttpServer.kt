@@ -484,9 +484,15 @@ class AgentHttpServer(private val context: Context) {
                 val remote = runCatching { call.request.origin.remoteHost }.getOrDefault("client")
                 AppLogManager.info("AgentWS", "Client connected: $remote")
                 try {
-                    // Kirim snapshot sinyal terakhir jika ada
-                    bridge.getLatest()?.let {
-                        send(Frame.Text(json.encodeToString(it)))
+                    // Kirim snapshot sinyal terakhir hanya bila belum berada di replayCache EventBus
+                    val latest = bridge.getLatest()
+                    val replay = AgentEventBus.signals.replayCache
+                    if (latest != null && replay.none {
+                            it.ts == latest.ts && it.symbol == latest.symbol &&
+                                it.action == latest.action && it.mode == latest.mode
+                        }
+                    ) {
+                        send(Frame.Text(json.encodeToString(latest)))
                     }
                     // Push setiap ada sinyal baru
                     AgentEventBus.signals.collect { signal ->

@@ -205,8 +205,14 @@ object AgentMarketScanner {
  */
 object AgentMarketScannerPusher {
 
-    /** Interval evaluasi pemindaian seluruh pair di latar (60 detik). */
-    const val SCAN_INTERVAL_MS = 60_000L
+    /** Jeda debounce event-driven saat menerima pembaruan tick pasar live (1,5 detik). */
+    const val LIVE_DEBOUNCE_MS = 1_500L
+
+    /** Interval cadangan saat tidak ada aliran tick live masuk (20 detik, bukan 60 detik). */
+    const val SCAN_INTERVAL_MS = 20_000L
+
+    /** Interval penyegaran penuh REST sebagai jaring pengaman jika WS ticker bursa senyap (45 detik). */
+    const val REST_REFRESH_GUARD_MS = 45_000L
 
     /** Batas maksimum diam sebelum mengirim heartbeat snapshot terbaru (5 menit). */
     const val HEARTBEAT_MS = 5 * 60_000L
@@ -215,15 +221,22 @@ object AgentMarketScannerPusher {
         append(scan.exchange).append('|')
         append(scan.available).append('|')
         append(scan.totalPairsScanned).append('|')
+        append(scan.bullishCount).append('|')
         scan.topCandidates.take(8).forEach { c ->
-            val scoreBucket = (c.serverScore / 2.0).roundToInt()
+            val scoreBucket = (c.serverScore * 2.0).roundToInt() // resolusi 0.5 poin
+            val priceBucket = if (c.price > 0.0 && c.price.isFinite()) {
+                kotlin.math.round(kotlin.math.ln(c.price) * 1000.0).toLong() // ~0.1% sensitivitas
+            } else 0L
             val bias = c.engineAnalysis?.overallBias ?: "-"
             val scalpAction = c.engineAnalysis?.scalping?.action ?: "-"
+            val scalpStage = c.engineAnalysis?.scalping?.stage ?: "-"
             append(c.symbol).append(':')
             append(scoreBucket).append(':')
+            append(priceBucket).append(':')
             append(c.momentumTier).append(':')
             append(bias).append(':')
-            append(scalpAction).append(';')
+            append(scalpAction).append(':')
+            append(scalpStage).append(';')
         }
     }
 

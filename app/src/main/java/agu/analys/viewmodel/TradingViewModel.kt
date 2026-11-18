@@ -569,6 +569,7 @@ class TradingViewModel(application: Application) : AndroidViewModel(application)
         }
         marketViewModel.resetDashboardPagination()
         refreshWorthCoinsFromMarket(resetPagination = true)
+        agu.analys.bridge.AgentOutputBridge.getInstance(getApplication()).onStrategyModeChanged()
     }
 
     fun setScalpingMode(enabled: Boolean) {

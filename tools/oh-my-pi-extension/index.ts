@@ -12,6 +12,21 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 
+type TechnicalBreakdown = {
+  rsi?: number | null;
+  macd?: string | null;
+  emaTrend?: string | null;
+  volumeSpike?: boolean;
+  orderbookPressure?: string | null;
+  mtfDirection?: string | null;
+  mtfStatusTitle?: string | null;
+  mtfCheckpointsOk?: number | null;
+  scalpingSetup?: string | null;
+  scalpingRegime?: string | null;
+  scalpingStage?: string | null;
+  scalpingScore?: number | null;
+};
+
 type Signal = {
   ts: number;
   exchange: string;
@@ -25,6 +40,7 @@ type Signal = {
   tp2?: number;
   sl?: number;
   reason: string;
+  technical?: TechnicalBreakdown;
   type?: string;
 };
 
@@ -70,6 +86,7 @@ async function bridgeToken(): Promise<string> {
 
 let wsClient: WebSocket | null = null;
 const lastSignals: Signal[] = [];
+let lastActionableSignal: Signal | null = null;
 
 /**
  * Portofolio (2026-11-06): snapshot dikirim app lewat `/ws/portfolio` saat isinya
@@ -229,6 +246,16 @@ function connectPortfolioWs(logger?: {
 function pushSignal(sig: Signal) {
   lastSignals.push(sig);
   if (lastSignals.length > 100) lastSignals.shift();
+  if (sig.action && sig.action.toUpperCase() !== "HOLD") {
+    lastActionableSignal = sig;
+  }
+}
+
+function formatSignalSummary(s: Signal, ageSec: number): string {
+  const stage = s.technical?.scalpingStage ? ` [${s.technical.scalpingStage}]` : "";
+  const score =
+    typeof s.technical?.scalpingScore === "number" ? ` (skor ${s.technical.scalpingScore})` : "";
+  return `${s.symbol} ${s.action}${stage}${score} ${s.confidence}% @ ${s.price} — ${s.reason} (usia sinyal: ${ageSec < 0 ? "?" : ageSec}s)`;
 }
 
 function connectWs(logger?: { info?: (m: string, ...a: unknown[]) => void; debug?: (m: string, ...a: unknown[]) => void }) {
@@ -260,32 +287,46 @@ function connectWs(logger?: { info?: (m: string, ...a: unknown[]) => void; debug
 }
 
 async function fetchLatest(): Promise<
-  | { source: string; signal: Signal; summary: string; actionable: boolean; ageSec: number | null }
+  | {
+      source: string;
+      signal: Signal;
+      summary: string;
+      actionable: boolean;
+      ageSec: number | null;
+      latestActionable?: Signal | null;
+    }
   | { error: string }
 > {
   if (lastSignals.length > 0) {
     const s = lastSignals[lastSignals.length - 1];
     const ageSec = Math.round((Date.now() - s.ts) / 1000);
+    const recentActionable =
+      s.action !== "HOLD"
+        ? s
+        : lastActionableSignal && Date.now() - lastActionableSignal.ts <= 15 * 60 * 1000
+          ? lastActionableSignal
+          : null;
     return {
       source: "websocket_push",
       signal: s,
-      summary: `${s.symbol} ${s.action} ${s.confidence}% @ ${s.price} — ${s.reason} (usia sinyal: ${ageSec < 0 ? "?" : ageSec}s)`,
+      summary: formatSignalSummary(s, ageSec),
       actionable: s.confidence >= 70 && s.action !== "HOLD",
       ageSec,
+      ...(recentActionable && recentActionable !== s ? { latestActionable: recentActionable } : {}),
     };
   }
   try {
     const res = await fetch(`${BRIDGE_HTTP}/signals/latest`, {
       signal: AbortSignal.timeout(3000),
     });
-    if (!res.ok) return { error: "No signal yet (bridge ON tapi belum ada EMIT non-HOLD)" };
+    if (!res.ok) return { error: "Belum ada sinyal live dari bridge (pastikan sakelar Agent Bridge ON)" };
     const data = (await res.json()) as Signal;
     pushSignal(data);
     const ageSec = Math.round((Date.now() - data.ts) / 1000);
     return {
       source: "http_polling",
       signal: data,
-      summary: `${data.symbol} ${data.action} ${data.confidence}% @ ${data.price} — ${data.reason} (usia sinyal: ${ageSec < 0 ? "?" : ageSec}s)`,
+      summary: formatSignalSummary(data, ageSec),
       actionable: data.confidence >= 70 && data.action !== "HOLD",
       ageSec,
     };
@@ -1037,9 +1078,10 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     name: "get_latest_signal",
     label: "Latest signal",
     description:
-      "Ambil sinyal terakhir dari analisa-pasar: cache WebSocket dulu, fallback HTTP /signals/latest",
+      "Ambil sinyal live terakhir dari analisa-pasar (termasuk HOLD, stage, dan skor): cache WebSocket dulu, fallback HTTP /signals/latest",
     parameters: z.object({}),
     async execute(_toolCallId, _params) {
+      connectWs(pi.logger);
       return textResult(await fetchLatest());
     },
   });
@@ -1048,7 +1090,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     name: "subscribe_signals",
     label: "Subscribe signals",
     description:
-      "Tunggu push WebSocket beberapa detik, kembalikan sinyal yang masuk di jendela itu (plus cache)",
+      "Tunggu push WebSocket live beberapa detik, kembalikan pembaruan sinyal (termasuk HOLD, stage, dan perubahan skor) yang masuk di jendela itu",
     parameters: z.object({
       seconds: z
         .number()
@@ -1071,7 +1113,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         signals: fresh.length > 0 ? fresh : lastSignals.slice(-5),
         note:
           fresh.length === 0
-            ? "Tidak ada push baru. Engine app harus EMIT (non-HOLD) saat jendela ini."
+            ? "Belum ada perubahan sinyal/skor baru dalam jendela ini. Cek bridge_health atau pastikan feed pair sedang aktif."
             : undefined,
       });
     },
@@ -1195,6 +1237,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       try {
+        connectMarketScanWs(pi.logger);
         const useWsCache =
           !params.refresh &&
           !params.quote &&
@@ -1204,7 +1247,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         if (useWsCache) {
           const latest = lastMarketScans[lastMarketScans.length - 1];
           const ageSec = Math.round((Date.now() - latest.ts) / 1000);
-          if (latest.available && ageSec >= 0 && ageSec <= 30) {
+          if (latest.available && ageSec >= 0 && ageSec <= 15) {
             return textResult({ source: "websocket_cache", ageSec, ...latest });
           }
         }

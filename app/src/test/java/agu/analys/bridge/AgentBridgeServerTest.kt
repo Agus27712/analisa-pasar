@@ -449,4 +449,71 @@ class AgentBridgeServerTest {
         AgentMarketScanProvider.onExchangeChanged("INDODAX")
         assertEquals(null, AgentMarketScanProvider.currentSelection())
     }
+
+    @Test
+    fun `websocket signals mengirim update HOLD beserta scalpingStage dan scalpingScore`() {
+        runBlocking {
+            server.start()
+            assertTrue(server.awaitSettled(20_000) is AgentBridgeServerState.Running)
+
+            val wsQueue = java.util.concurrent.LinkedBlockingQueue<String>()
+            val ws = java.net.http.HttpClient.newHttpClient()
+                .newWebSocketBuilder()
+                .buildAsync(
+                    java.net.URI.create("ws://127.0.0.1:${AgentHttpServer.PORT}/ws/signals"),
+                    object : java.net.http.WebSocket.Listener {
+                        private val buf = StringBuilder()
+                        override fun onText(
+                            webSocket: java.net.http.WebSocket,
+                            data: CharSequence,
+                            last: Boolean
+                        ): java.util.concurrent.CompletionStage<*>? {
+                            buf.append(data)
+                            if (last) {
+                                wsQueue.offer(buf.toString())
+                                buf.setLength(0)
+                            }
+                            webSocket.request(1)
+                            return null
+                        }
+                    }
+                )
+                .get(5, java.util.concurrent.TimeUnit.SECONDS)
+            try {
+                val marker = "HOLD_LIVE_${System.currentTimeMillis() % 100000}"
+                AgentEventBus.emitSignal(
+                    AgentSignalOutput(
+                        ts = System.currentTimeMillis(),
+                        exchange = "tokocrypto",
+                        symbol = "SOLUSDT",
+                        quote = "USDT",
+                        mode = "SCALPING",
+                        action = "HOLD",
+                        confidence = 48f,
+                        price = 180.5,
+                        reason = marker,
+                        technical = TechnicalBreakdown(
+                            scalpingStage = "WATCH",
+                            scalpingScore = 62
+                        )
+                    )
+                )
+                var received: String? = null
+                repeat(12) {
+                    val f = wsQueue.poll(1, java.util.concurrent.TimeUnit.SECONDS) ?: return@repeat
+                    if (f.contains(marker)) {
+                        received = f
+                        return@repeat
+                    }
+                }
+                assertTrue("Frame HOLD live tidak diterima di /ws/signals", received != null)
+                assertTrue("Stage harus terbawa: $received", received!!.contains("\"scalpingStage\":\"WATCH\""))
+                assertTrue("Score harus terbawa: $received", received!!.contains("\"scalpingScore\":62"))
+            } finally {
+                ws.abort()
+                server.stop()
+                server.awaitSettled(10_000)
+            }
+        }
+    }
 }
