@@ -3,6 +3,7 @@ package agu.analys.data
 import agu.analys.model.OrderBookItem
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
+import agu.analys.service.TokocryptoRateGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +60,15 @@ object OrderBookDepthCache {
         val last = lastFetchTime[key] ?: 0L
 
         if (!force && cache.containsKey(key) && (now - last < 30_000L)) {
+            return
+        }
+
+        // Gerbang 429 menutup host: jangan menembak depth sama sekali. Nilai lama di cache
+        // tetap dipakai; mengosongkannya membuat pressure hilang dari sinyal padahal
+        // datanya cuma "belum bisa diperbarui".
+        if (!exchange.equals("INDODAX", true) &&
+            TokocryptoRateGate.shouldBlock(System.currentTimeMillis())
+        ) {
             return
         }
 

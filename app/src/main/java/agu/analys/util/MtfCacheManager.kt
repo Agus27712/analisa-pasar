@@ -4,6 +4,7 @@ import agu.analys.model.CandleBar
 import agu.analys.model.Timeframe
 import agu.analys.service.IndodaxMarketService
 import agu.analys.service.TokocryptoMarketService
+import agu.analys.service.TokocryptoRateGate
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -161,6 +162,12 @@ object MtfCacheManager {
         if (backgroundJob?.isActive == true) return
         backgroundJob = scope.launch {
             while (isActive) {
+                // Host ditutup 429: berputar tiap 1,5 detik hanya membuang CPU. Tunggu
+                // sampai jeda selesai, lalu lanjutkan.
+                if (activeExchange != "INDODAX" && gateClosed()) {
+                    delay(5_000L)
+                    continue
+                }
                 val candidate = findNextBackgroundCandidate()
                 if (candidate != null) {
                     prefetchSymbol(candidate, activeExchange, isTier1 = false)
@@ -204,6 +211,9 @@ object MtfCacheManager {
         val tfs = listOf(Timeframe.H1, Timeframe.M15, Timeframe.M5, Timeframe.M1, Timeframe.H4)
         for (tf in tfs) {
             if (!scope.isActive) break
+            // Host ditutup 429: mengiterasi 5 timeframe hanya menghasilkan 5 kegagalan
+            // beruntun. Berhenti, biarkan gerbang yang menentukan kapan boleh mencoba lagi.
+            if (!exchange.equals("INDODAX", true) && gateClosed()) break
             val currentCandles = getCachedCandles(norm, tf, exchange)
             if (!isCacheValid(tf, currentCandles)) {
                 updateStatus(norm, tf, if (currentCandles?.isNotEmpty() == true) MtfStatus.UPDATING else MtfStatus.SYNCING, exchange)
@@ -213,6 +223,9 @@ object MtfCacheManager {
             }
         }
     }
+
+    private fun gateClosed(): Boolean =
+        TokocryptoRateGate.shouldBlock(System.currentTimeMillis())
 
     private suspend fun safeFetch(symbol: String, tf: Timeframe, exchange: String, isTier1: Boolean) {
         val norm = symbol.trim().uppercase()
@@ -233,22 +246,25 @@ object MtfCacheManager {
         }
 
         // Fetch exclusively from respective market data service
-        var fetched = if (exchange.equals("INDODAX", true)) {
+        val toko = !exchange.equals("INDODAX", true)
+        var fetched = if (!toko) {
             val res = IndodaxMarketService.fetchCandles(norm, tf, limit = limit)
             if (res.isEmpty() && (norm.contains("_") || norm.contains("/"))) {
                 IndodaxMarketService.fetchCandles(norm.replace("/", "").replace("_", ""), tf, limit = limit)
             } else res
         } else {
             val res = TokocryptoMarketService.fetchCandles(norm, tf, limit = limit)
-            if (res.isEmpty() && (norm.contains("_") || norm.contains("/"))) {
+            if (res.isEmpty() && (norm.contains("_") || norm.contains("/")) && !gateClosed()) {
                 TokocryptoMarketService.fetchCandles(norm.replace("/", "").replace("_", ""), tf, limit = limit)
             } else res
         }
 
-        // Quick retry if transient failure occurs during exchange switch
-        if (fetched.isEmpty()) {
+        // Quick retry if transient failure occurs during exchange switch.
+        // DILEWATI saat gerbang 429 menutup host: percobaan kedua ke host yang sama hanya
+        // menambah beban, dan hasilnya pasti kosong lagi.
+        if (fetched.isEmpty() && !(toko && gateClosed())) {
             delay(200L)
-            fetched = if (exchange.equals("INDODAX", true)) {
+            fetched = if (!toko) {
                 IndodaxMarketService.fetchCandles(norm, tf, limit = limit)
             } else {
                 TokocryptoMarketService.fetchCandles(norm, tf, limit = limit)

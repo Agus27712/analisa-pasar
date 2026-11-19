@@ -35,7 +35,17 @@ import kotlinx.coroutines.sync.withPermit
 object AgentMarketScanProvider {
 
     private const val CACHE_TTL_MS = 20_000L
-    private const val DEEP_ANALYSIS_CACHE_TTL_MS = 20_000L
+
+    /**
+     * Masa berlaku satu evaluasi Tahap 2 (engine scalping/intraday/swing per kandidat).
+     *
+     * Satu evaluasi = 1 ticker + 7 kline + 1 depth ≈ 9 permintaan. Dengan `DEFAULT_DEEP_EVAL`
+     * = 6 kandidat, satu siklus pemindaian menembak ~54 permintaan ke host gateway. TTL 20 detik
+     * membuat cache itu praktis tidak pernah terpakai, karena siklus pemindaian sendiri 20 detik
+     * — jadi beban 54 permintaan berjalan **terus-menerus**. 90 detik cukup: kandidat teratas
+     * jarang berganti, dan skor engine yang berumur ≤90 detik masih jujur untuk pemeringkatan.
+     */
+    private const val DEEP_ANALYSIS_CACHE_TTL_MS = 90_000L
     private const val DEFAULT_DEEP_EVAL = 6
     private const val MAX_DEEP_EVAL = 10
 
@@ -303,11 +313,17 @@ object AgentMarketScanProvider {
         }
 
         // Tahap 2: evaluasi mendalam `ModeSignalEvaluator` pada kandidat terbaik
-        // yang tidak overextended (memanfaatkan cache 20 detik agar push live cepat & hemat API).
+        // yang tidak overextended (memanfaatkan cache agar push live cepat & hemat API).
         val deepTargets = scoredPairs
             .filter { it.momentumTier != "OVEREXTENDED" }
             .ifEmpty { scoredPairs }
             .take(DEFAULT_DEEP_EVAL)
+
+        // Host ditutup 429: evaluasi baru = ~8 permintaan per kandidat ke host yang sama.
+        // Pakai analisis yang sudah ada di cache saja; kandidat tanpa cache tampil dengan
+        // `engineAnalysis = null` — lebih jujur daripada memaksa host yang sedang menolak.
+        val allowFreshDeep = source != MarketDataSource.TOKOCRYPTO ||
+            !agu.analys.service.TokocryptoRateGate.shouldBlock(System.currentTimeMillis())
 
         val sem = Semaphore(3)
         val evaluatedCandidates = coroutineScope {
@@ -319,20 +335,26 @@ object AgentMarketScanProvider {
                         ?.analysis
                         ?.copy(price = item.price)
 
-                    val analysis = cachedDeep ?: sem.withPermit {
-                        runCatching {
-                            AgentEngineAnalysisProvider.evaluateWithKnownTick(
-                                context = context,
-                                norm = item.symbol,
-                                source = source,
-                                prefetchedTick = tickBySymbol[item.symbol]
-                            )
-                        }.getOrNull()?.also { freshAnalysis ->
-                            if (freshAnalysis.available) {
-                                deepAnalysisCache[cacheKey] = CachedDeepAnalysis(
-                                    ts = System.currentTimeMillis(),
-                                    analysis = freshAnalysis
+                    val analysis: AgentEngineAnalysis? = if (cachedDeep != null) {
+                        cachedDeep
+                    } else if (!allowFreshDeep) {
+                        null
+                    } else {
+                        sem.withPermit {
+                            runCatching {
+                                AgentEngineAnalysisProvider.evaluateWithKnownTick(
+                                    context = context,
+                                    norm = item.symbol,
+                                    source = source,
+                                    prefetchedTick = tickBySymbol[item.symbol]
                                 )
+                            }.getOrNull()?.also { freshAnalysis ->
+                                if (freshAnalysis.available) {
+                                    deepAnalysisCache[cacheKey] = CachedDeepAnalysis(
+                                        ts = System.currentTimeMillis(),
+                                        analysis = freshAnalysis
+                                    )
+                                }
                             }
                         }
                     }

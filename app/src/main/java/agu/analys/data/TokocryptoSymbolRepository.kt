@@ -258,6 +258,9 @@ object TokocryptoSymbolRepository {
 
 
     private suspend fun fetchExecutionRulesQuietly() {
+        // Host gateway dijeda 429: lewati. executionRules hanya dipakai guard rentang harga,
+        // dan nilai lama (atau bawaan 1.1/0.9) tetap aman.
+        if (agu.analys.service.TokocryptoRateGate.shouldBlock(System.currentTimeMillis())) return
         try {
             val req = Request.Builder()
                 .url(TOKOCRYPTO_EXECUTION_RULES_URL)

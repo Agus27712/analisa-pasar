@@ -109,6 +109,20 @@ object AgentEngineAnalysisProvider {
         source: MarketDataSource,
         prefetchedTick: agu.analys.model.MarketTick? = null
     ): AgentEngineAnalysis {
+        // Gerbang 429 menutup host data: satu evaluasi = 1 ticker + 7 kline + 1 depth ke
+        // host yang sedang menolak. Tolak lebih awal dengan alasan yang jujur, jangan
+        // mengembalikan `price: 0` yang mudah salah dibaca sebagai "pair tidak ada".
+        if (source == MarketDataSource.TOKOCRYPTO &&
+            agu.analys.service.TokocryptoRateGate.shouldBlock(System.currentTimeMillis())
+        ) {
+            return AgentEngineAnalysis(
+                symbol = norm,
+                available = false,
+                exchange = source.name,
+                error = "Host data Tokocrypto sedang dalam jeda 429 (rate limit). " +
+                    "Analisis tidak dijalankan agar tidak menambah beban; coba lagi setelah jeda selesai."
+            )
+        }
         val prefs = prefsFor(context)
         return try {
             coroutineScope {

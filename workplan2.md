@@ -6239,3 +6239,41 @@ jaringan dan baterai.
   cepat — **bukan** perbaikan winrate/expectancy, bukan jaminan profit, dan tidak mengaktifkan
   eksekusi order otomatis apa pun.
 
+
+## 100. Pengganda 429 di kode app + gerbang jeda host (2026-11-19)
+
+**Pemicu:** host data `www.tokocrypto.site` membalas 429 sampai app buta
+(`H1/M15/M5 0/20`, `market_scan.json` beku). Pertanyaan owner: kode app mana yang ikut
+menyebabkan 429, dan pastikan app **tidak** memakai Binance (hanya Indodax + Tokocrypto).
+
+**Hasil audit:** `app/src/main` **tidak** memuat satu pun rujukan `binance.com` /
+`binance.vision` / `api.binance`. Seluruh data pasar berasal dari gateway Tokocrypto
+(`tokocrypto.site`, `cloudme-toko.2meta.app`), host resmi `tokocrypto.com`, dan Indodax.
+`BINANCE` hanya string nama bursa warisan di `PaperRehydrateScope`, bukan alamat jaringan.
+
+**Enam pengganda 429 yang diperbaiki** (rincian + bukti di
+`docs/laporan_temuan_bugs_429_pengganda.md`):
+
+| # | Berkas | Cacat | Perbaikan |
+|---|---|---|---|
+| K1 | `service/TokocryptoMarketService.kt` | `429` diulang seperti `5xx` | `429` tidak diulang; membuka `TokocryptoRateGate` (Retry-After, bawaan 60 s, plafon 5 menit) |
+| K2 | `service/TokocryptoMarketService.kt` | `getWithFallback` menembak 2–3 URL cadangan setelah gagal | URL bergerbang dilewati selama jeda; URL `tokocrypto.com` tetap dicoba |
+| K3 | `service/TokocryptoMarketService.kt` | `/ticker/24hr` seluruh pasar diunduh 4 pemanggil × 2 host, salah satunya tiap **4 detik** | `getFullMarketCached()` berbagi payload 10 s; daftar ≤5 simbol lewat ticker per-simbol (lebih segar); isi lama hanya dipakai < 5 menit |
+| K4 | `bridge/AgentMarketScanProvider.kt` | evaluasi Tahap 2 (≈54 permintaan/siklus) dengan cache 20 s = siklus 20 s | TTL 90 s; saat gerbang menutup evaluasi baru dilewati |
+| K5 | `util/MtfCacheManager.kt` | retry 200 ms + loop latar 1,5 s tanpa henti | prefetch berhenti per simbol, retry dilewati, worker tidur 5 s saat jeda |
+| K6 | `data/OrderBookDepthCache.kt` | depth diminta per tick walau host menolak | dilewati selama jeda, cache lama dipertahankan |
+| — | `data/TokocryptoSymbolRepository.kt` | `executionRules` tetap diambil saat host menolak | dilewati selama jeda (nilai bawaan tetap aman) |
+| — | `bridge/AgentEngineAnalysisProvider.kt` | `available:false, price:0` ambigu saat host menolak | alasan eksplisit "jeda 429", nol permintaan |
+
+**Berkas baru:** `service/TokocryptoRateGate.kt` (gerbang jeda global, murni, tanpa Android API),
+`app/src/test/java/agu/analys/service/TokocryptoRateGateTest.kt` (8 uji tanpa jaringan).
+
+**Ekstensi OMP:** `tools/oh-my-pi-extension/index.ts` disamakan dengan salinan kerja di
+`~/.omp/agent/extensions/analisa-pasar/index.ts` (md5 `70de361c772e343e6a29b69bb1d0d373`) —
+berisi `feedBlindness()`/`ensureFeedState()` yang menolak `get_engine_analysis` dan
+`get_market_scan(refresh)` saat feed app buta, plus laporan `feed` di `bridge_health`,
+`get_latest_signal`, `subscribe_signals`, `subscribe_market_scan`.
+
+**Yang tidak diklaim:** gerbang ini tidak menghapus 429 yang disebabkan beban dari perangkat
+lain atau kuota host yang memang sudah habis. Ia hanya memastikan app **berhenti menambah**
+beban dan pulih sendiri setelah jeda.

@@ -245,8 +245,13 @@ class AgentHttpServer(private val context: Context) {
                 )
             }
             get("/health") {
+                // Status gerbang 429 ikut dilaporkan: `feed` di ekstensi OMP membedakan
+                // "tidak ada sinyal" dari "host data sedang menolak".
+                val nowMs = System.currentTimeMillis()
+                val until = agu.analys.service.TokocryptoRateGate.blockedUntilMs()
+                val cooling = until > nowMs
                 call.respondText(
-                    """{"ok":true,"ts":${System.currentTimeMillis()}}""",
+                    """{"ok":true,"ts":$nowMs,"rate_gate":{"cooling":$cooling,"until":$until,"remaining_ms":${if (cooling) until - nowMs else 0L}}}""",
                     ContentType.Application.Json
                 )
             }

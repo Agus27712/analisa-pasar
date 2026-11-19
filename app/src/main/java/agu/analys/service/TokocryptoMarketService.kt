@@ -43,6 +43,43 @@ object TokocryptoMarketService {
     private const val MIN_INTERVAL_MS = 100L
     private const val MAX_RETRIES = 2
 
+    /**
+     * Masa berlaku satu payload ticker seluruh pasar.
+     *
+     * Endpoint `/ticker/24hr` tanpa `symbol` mengembalikan **seluruh** pasar sekaligus, dan
+     * sebelum ini setiap pemanggil menariknya sendiri-sendiri: `MarketViewModel` tiap 30 s,
+     * `TradingForegroundService` tiap 4 s, `TradingViewModelSync` tiap 10 s, dan
+     * `AgentMarketScanProvider` tiap ≤45 s — masing-masing **dua kali** (Type 1 + Type 3).
+     * Itu beban tetap belasan unduhan pasar penuh per menit ke satu host gateway, dan
+     * itulah yang menghabiskan kuota sampai 429. Cache ini membuat semua pemanggil berbagi
+     * satu hasil.
+     *
+     * 10 detik dipilih, bukan lebih panjang: `TradingForegroundService` memakai ticker ini
+     * untuk memantau stop/TP posisi, jadi umur harga yang boleh dipakai **dibatasi** di sini.
+     * Dengan 10 s, pemantauan 4 detik berubah menjadi efektif 10 detik — masih jauh di bawah
+     * jarak level stop (±3%), sementara beban turun dari 30 menjadi 6 unduhan per menit.
+     */
+    private const val FULL_TICKER_TTL_MS = 10_000L
+
+    /**
+     * Batas umur isi lama yang masih boleh dipakai saat pengambilan gagal.
+     *
+     * Tanpa batas ini, dashboard akan menampilkan harga berjam-jam lalu seolah-olah live.
+     * Lewat batas ini lebih jujur mengembalikan `null` sehingga pemanggil menandai pasar
+     * sebagai tidak tersedia.
+     */
+    private const val FULL_TICKER_STALE_MAX_MS = 5 * 60_000L
+
+    /**
+     * Batas jumlah simbol sebelum [fetchTickers] beralih dari permintaan per-simbol ke satu
+     * payload seluruh pasar. Di atas batas ini, N permintaan per-simbol lebih mahal daripada
+     * satu unduhan pasar penuh.
+     */
+    private const val SINGLE_TICKER_MAX_SYMBOLS = 5
+
+    private val fullTickerCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+    private val fullTickerMutex = Mutex()
+
     // Base URLs
     private const val TOKOCRYPTO_GENERAL_URL = "https://www.tokocrypto.com"
     private const val TOKOCRYPTO_TYPE1_MARKET_URL = "https://www.tokocrypto.site/api/v3"
@@ -102,9 +139,14 @@ object TokocryptoMarketService {
     }
 
     private suspend fun get(url: String): String? = withContext(Dispatchers.IO) {
+        val gated = TokocryptoRateGate.appliesTo(url)
         var attempt = 0
         while (attempt < MAX_RETRIES) {
             attempt++
+            // Host yang baru saja membalas 429 ditutup total: nol koneksi keluar selama jeda.
+            if (gated && TokocryptoRateGate.shouldBlock(System.currentTimeMillis())) {
+                return@withContext null
+            }
             try {
                 throttle()
                 val req = Request.Builder()
@@ -118,7 +160,18 @@ object TokocryptoMarketService {
                     val body = response.body?.string()
                     when {
                         response.isSuccessful -> return@withContext body
-                        code == 429 || code in 500..599 -> {
+                        code == 429 -> {
+                            // 429 BUKAN gangguan sesaat: mengulanginya menambah beban ke host
+                            // yang sudah menolak. Buka jeda global lalu menyerah.
+                            if (gated) {
+                                TokocryptoRateGate.trip(
+                                    retryAfterHeader = response.header("Retry-After"),
+                                    nowMs = System.currentTimeMillis()
+                                )
+                            }
+                            return@withContext null
+                        }
+                        code in 500..599 -> {
                             val backoff = (200L * (1 shl (attempt - 1))).coerceAtMost(1000L)
                             delay(backoff)
                         }
@@ -137,10 +190,49 @@ object TokocryptoMarketService {
         null
     }
 
+    /**
+     * Ambil payload ticker seluruh pasar dengan cache bersama [FULL_TICKER_TTL_MS].
+     *
+     * Hanya untuk URL yang mengembalikan **semua** pair. Endpoint per-simbol tidak boleh
+     * lewat sini: kuncinya URL, jadi cache per-simbol akan salah kalau digabung.
+     */
+    private suspend fun getFullMarketCached(url: String): String? {
+        val now = System.currentTimeMillis()
+        fullTickerCache[url]?.let { (at, body) ->
+            if (now - at < FULL_TICKER_TTL_MS) return body
+        }
+        return fullTickerMutex.withLock {
+            val nowLocked = System.currentTimeMillis()
+            fullTickerCache[url]?.let { (at, body) ->
+                if (nowLocked - at < FULL_TICKER_TTL_MS) return@withLock body
+            }
+            val fetched = get(url)
+            if (!fetched.isNullOrBlank()) {
+                fullTickerCache[url] = System.currentTimeMillis() to fetched
+                fetched
+            } else {
+                // Gagal: pakai isi lama kalau masih dalam batas [FULL_TICKER_STALE_MAX_MS]
+                // (lebih baik daripada mengosongkan dashboard), tetapi jangan perpanjang TTL-nya.
+                fullTickerCache[url]?.let { (at, body) ->
+                    if (System.currentTimeMillis() - at < FULL_TICKER_STALE_MAX_MS) body else null
+                }
+            }
+        }
+    }
+
     private suspend fun getWithFallback(primaryUrl: String, fallbackPaths: List<String>): String? {
-        val primaryRes = get(primaryUrl)
-        if (!primaryRes.isNullOrBlank()) {
-            return primaryRes
+        // Saat gerbang 429 menutup gateway, URL gateway dilewati — tetapi URL host resmi
+        // (`www.tokocrypto.com/open/v1/...`) tetap dicoba, karena host itu tidak terkena
+        // rate limit yang sama. Sebelum gerbang ini, satu kegagalan gateway berubah menjadi
+        // 3–4 permintaan beruntun ke host yang sama.
+        fun bolehDitembak(url: String): Boolean =
+            !TokocryptoRateGate.appliesTo(url) || !TokocryptoRateGate.shouldBlock(System.currentTimeMillis())
+
+        if (bolehDitembak(primaryUrl)) {
+            val primaryRes = get(primaryUrl)
+            if (!primaryRes.isNullOrBlank()) {
+                return primaryRes
+            }
         }
 
         // Fallback ke relative paths atau absolute URLs
@@ -150,6 +242,7 @@ object TokocryptoMarketService {
                 path.startsWith("/") -> "$TOKOCRYPTO_TYPE1_MARKET_URL$path".replace("/api/v3/api/v3", "/api/v3")
                 else -> "$TOKOCRYPTO_TYPE1_MARKET_URL/$path".replace("/api/v3/api/v3", "/api/v3")
             }
+            if (!bolehDitembak(url)) continue
             val fb = get(url)
             if (!fb.isNullOrBlank()) {
                 return fb
@@ -234,9 +327,20 @@ object TokocryptoMarketService {
     }
 
     /**
-     * Fetch multiple Tickers dengan routing Symbol Type 1 vs Type 3
+     * Fetch multiple Tickers dengan routing Symbol Type 1 vs Type 3.
+     *
+     * Daftar kecil (≤ [SINGLE_TICKER_MAX_SYMBOLS]) diambil per simbol, bukan lewat
+     * `/ticker/24hr` seluruh pasar. Alasannya umur data: pemantauan posisi membutuhkan harga
+     * yang masih segar, sedangkan payload seluruh pasar di-cache [FULL_TICKER_TTL_MS] agar
+     * tidak diunduh berulang oleh empat pemanggil. Untuk 1–5 simbol, satu permintaan
+     * per-simbol jauh lebih murah **dan** lebih segar daripada satu payload pasar penuh.
      */
     suspend fun fetchTickers(symbols: List<String>): List<MarketTick> = withContext(Dispatchers.IO) {
+        if (symbols.size in 1..SINGLE_TICKER_MAX_SYMBOLS) {
+            return@withContext symbols.mapNotNull { sym ->
+                runCatching { fetchTicker(sym) }.getOrNull()
+            }
+        }
         try {
             val symbolSet = symbols.map { toTokocryptoSymbol(it) }.toSet()
             val results = mutableListOf<MarketTick>()
@@ -244,8 +348,7 @@ object TokocryptoMarketService {
 
             // 1. Fetch Tickers Type 1 (MBX Broker / Cloud)
             val primaryUrl1 = "$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr"
-            val fallbackPaths1 = listOf("/api/v3/ticker/24hr")
-            val jsonStr1 = getWithFallback(primaryUrl1, fallbackPaths1)
+            val jsonStr1 = getFullMarketCached(primaryUrl1)
             if (!jsonStr1.isNullOrBlank()) {
                 val array1 = if (jsonStr1.trim().startsWith("[")) JSONArray(jsonStr1) else JSONArray()
                 for (i in 0 until array1.length()) {
@@ -276,8 +379,7 @@ object TokocryptoMarketService {
             val hasType3 = remainingSymbols.any { TokocryptoSymbolRepository.getSymbolType(it) == 3 }
             if (hasType3 || remainingSymbols.isNotEmpty()) {
                 val primaryUrl3 = "$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr"
-                val fallbackPaths3 = listOf("/open/v1/ticker/24hr", "/api/v3/ticker/24hr")
-                val jsonStr3 = getWithFallback(primaryUrl3, fallbackPaths3)
+                val jsonStr3 = getFullMarketCached(primaryUrl3)
                 if (!jsonStr3.isNullOrBlank()) {
                     val array3 = if (jsonStr3.trim().startsWith("[")) {
                         JSONArray(jsonStr3)
@@ -581,8 +683,8 @@ object TokocryptoMarketService {
             // Dijatah TTL 30 menit di repository, jadi murah bila sudah sinkron.
             TokocryptoSymbolRepository.ensureSymbolsLoaded(false)
             val (json1, json3) = coroutineScope {
-                val a = async { get("$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr") }
-                val b = async { get("$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr") }
+                val a = async { getFullMarketCached("$TOKOCRYPTO_TYPE1_MARKET_URL/ticker/24hr") }
+                val b = async { getFullMarketCached("$TOKOCRYPTO_TYPE3_MARKET_URL/ticker/24hr") }
                 a.await() to b.await()
             }
             if (json1.isNullOrBlank() && json3.isNullOrBlank()) return@withContext TokoRankingsResult()

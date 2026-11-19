@@ -207,6 +207,132 @@ function hasMultiplePairsInput(raw: string): boolean {
   return /[,;|+\[\]{}\s]/.test(trimmed);
 }
 
+/**
+ * Deteksi feed app yang BUTA karena 429 (2026-11-19).
+ *
+ * Gejalanya menipu: socket tetap terbuka, frame tetap mengalir, ts tetap maju.
+ * Yang kosong adalah ISINYA. Dua diskriminator, keduanya dibaca dari cache
+ * lokal — nol request tambahan ke host mana pun:
+ *
+ *   1. `reason` memuat checkpoint MTF; H1/M15/M5 = 0/20 berarti app tidak punya
+ *      candle sama sekali. M1 boleh berapa saja, tidak menyelamatkan.
+ *   2. `market_scan.ts` tidak maju > 300 s sementara isinya (494 pair) terus
+ *      diulang. Payload besar bukan bukti data segar.
+ *
+ * Konsekuensi: `get_engine_analysis` menolak saat buta. Rute itu memproxy ke
+ * app, dan app lalu menarik ticker dari host yang sedang kehabisan kuota —
+ * setiap panggilan menambah beban ke host yang sudah gagal.
+ */
+const MTF_RE = /\b(H1|M15|M5|M1)\s+(\d+)\s*\/\s*(\d+)/g;
+const SCAN_FROZEN_MS = 5 * 60 * 1000;
+
+type FeedBlindness = {
+  blind: boolean;
+  verdict: "FEED_BLIND" | "FEED_OK" | "UNKNOWN";
+  reasons: string[];
+  mtf: Record<string, string> | null;
+  signalAgeSec: number | null;
+  scanAgeSec: number | null;
+  scanFrozen: boolean;
+  lastSignalTs: number | null;
+  lastScanTs: number | null;
+};
+
+function parseMtf(reason: string | undefined): Record<string, string> | null {
+  if (!reason) return null;
+  const out: Record<string, string> = {};
+  let m: RegExpExecArray | null;
+  MTF_RE.lastIndex = 0;
+  while ((m = MTF_RE.exec(reason)) !== null) out[m[1]] = `${m[2]}/${m[3]}`;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function feedBlindness(): FeedBlindness {
+  const now = Date.now();
+  const sig = lastSignals.length > 0 ? lastSignals[lastSignals.length - 1] : null;
+  const scan = lastMarketScans.length > 0 ? lastMarketScans[lastMarketScans.length - 1] : null;
+  const reasons: string[] = [];
+
+  const mtf = parseMtf(sig?.reason);
+  let mtfBlind = false;
+  if (mtf) {
+    for (const tf of ["H1", "M15", "M5"]) {
+      const v = mtf[tf];
+      if (!v) continue;
+      const ok = Number(v.split("/")[0]);
+      if (ok === 0) {
+        mtfBlind = true;
+        reasons.push(`MTF ${tf} ${v}: app tidak punya candle ${tf}`);
+      }
+    }
+  }
+
+  const signalAgeSec = sig ? Math.round((now - sig.ts) / 1000) : null;
+  const scanAgeSec = scan ? Math.round((now - scan.ts) / 1000) : null;
+
+  // "Beku" hanya bisa dibuktikan dari umur isi, bukan dari jumlah frame: scanner
+  // memang tidak periodik (terukur 0 frame dalam 90 s), jadi dua sampel identik
+  // tidak menambah bukti. Satu-satunya sinyal adalah `ts` yang tidak maju.
+  const scanFrozen = (scanAgeSec ?? 0) > SCAN_FROZEN_MS / 1000;
+  if (scanFrozen) reasons.push(`market_scan beku ${scanAgeSec}s (isi ${scan?.totalPairsScanned ?? "?"} pair diulang)`);
+
+  const blind = mtfBlind || scanFrozen;
+  const verdict: FeedBlindness["verdict"] = blind ? "FEED_BLIND" : mtf || scan ? "FEED_OK" : "UNKNOWN";
+
+  return {
+    blind,
+    verdict,
+    reasons,
+    mtf,
+    signalAgeSec,
+    scanAgeSec,
+    scanFrozen,
+    lastSignalTs: sig?.ts ?? null,
+    lastScanTs: scan?.ts ?? null,
+  };
+}
+
+/**
+ * `feedBlindness()` membaca cache yang hanya terisi oleh push WebSocket. Agen
+ * yang baru mulai punya cache kosong, jadi verdict-nya `UNKNOWN` — dan itu
+ * BUKAN izin untuk menembak app. Hidrasi dulu dari bridge lokal
+ * (`/signals/latest`, 127.0.0.1, nol beban ke host bursa), baru putuskan.
+ *
+ * Kalau setelah hidrasi status feed masih tidak bisa dipastikan, anggap buta:
+ * menolak satu panggilan jauh lebih murah daripada menambah beban ke host yang
+ * mungkin sedang 429.
+ */
+async function ensureFeedState(): Promise<FeedBlindness> {
+  let feed = feedBlindness();
+  if (feed.verdict !== "UNKNOWN") return feed;
+  try {
+    const res = await fetch(`${BRIDGE_HTTP}/signals/latest`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const sig = (await res.json()) as Signal;
+      // Jangan duplikasi: `/signals/latest` mengembalikan frame yang mungkin sudah
+      // ada di cache dari push WS, dan menyimpannya dua kali membuat `cache_total`
+      // dan urutan "terakhir" menyesatkan.
+      const last = lastSignals.length > 0 ? lastSignals[lastSignals.length - 1] : null;
+      if (!last || sig.ts > last.ts) pushSignal(sig);
+    }
+  } catch {
+    /* bridge mati: biarkan verdict UNKNOWN, pemanggil yang memutuskan */
+  }
+  feed = feedBlindness();
+  if (feed.verdict === "UNKNOWN") {
+    return {
+      ...feed,
+      blind: true,
+      verdict: "FEED_BLIND",
+      reasons: [
+        ...feed.reasons,
+        "status feed tidak bisa dipastikan (belum ada frame sinyal, bridge tidak menjawab /signals/latest)",
+      ],
+    };
+  }
+  return feed;
+}
+
 function pushPortfolio(p: Portfolio) {
   lastPortfolios.push(p);
   if (lastPortfolios.length > 50) lastPortfolios.shift();
@@ -312,6 +438,7 @@ async function fetchLatest(): Promise<
       summary: formatSignalSummary(s, ageSec),
       actionable: s.confidence >= 70 && s.action !== "HOLD",
       ageSec,
+      feed: feedBlindness(),
       ...(recentActionable && recentActionable !== s ? { latestActionable: recentActionable } : {}),
     };
   }
@@ -329,6 +456,7 @@ async function fetchLatest(): Promise<
       summary: formatSignalSummary(data, ageSec),
       actionable: data.confidence >= 70 && data.action !== "HOLD",
       ageSec,
+      feed: feedBlindness(),
     };
   } catch (e) {
     return {
@@ -344,10 +472,17 @@ async function fetchLatest(): Promise<
 // kebenaran app), jadi target harga di sini identik dengan mesin simulasi.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Host harga Tokocrypto: type 1 (mayoritas) → tokocrypto.site, type lain → cloudme. */
+/** Host harga: data-api.binance.vision saja.
+ *
+ * Bukan tokocrypto.site: host itu milik feed app sendiri dan pada 2026-11-18
+ * seluruh edge-nya membalas 429 (CloudFront, tanpa header rate-limit), yang
+ * membuat app jatuh ke `Menunggu data MTF` (H1/M15/M5 0/20). Setiap request
+ * ekstensi ke sana menambah beban host yang sama, jadi dipindah ke vision yang
+ * menyajikan buku identik (harga/klines sama persis, diverifikasi 2026-11-18).
+ * cloudme juga dibuang: hampir semua simbol dijawab `-1121 Invalid symbol`.
+ */
 const PRICE_HOSTS = [
-  "https://www.tokocrypto.site/api/v3/ticker/price",
-  "https://cloudme-toko.2meta.app/api/v1/ticker/price",
+  "https://data-api.binance.vision/api/v3/ticker/price",
 ];
 /** Host type-3 mengembalikan `time`; buang kalau sudah basi (pernah jumpa 4 bulan). */
 const PRICE_STALE_MS = 10 * 60 * 1000;
@@ -579,8 +714,7 @@ function journalSummary(trades: PaperTrade[]): JournalStats {
 }
 
 const KLINES_HOSTS = [
-  "https://www.tokocrypto.site/api/v3/klines",
-  "https://cloudme-toko.2meta.app/api/v1/klines",
+  "https://data-api.binance.vision/api/v3/klines",
 ];
 
 /** σ/ATR 1m dari 60 bar terakhir — konteks yang menentukan stop realistis. */
@@ -1105,14 +1239,20 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       const before = lastSignals.length;
       await new Promise((r) => setTimeout(r, seconds * 1000));
       const fresh = lastSignals.slice(before);
+      // `ws_open:true` hanya berarti soket lokal hidup. Saat app 429, frame tetap
+      // mengalir tapi isinya kosong (MTF 0/20), jadi status feed ikut dilaporkan
+      // supaya "tidak ada push baru" tidak terbaca sebagai "market sepi".
+      const feed = feedBlindness();
       return textResult({
         waited_seconds: seconds,
         ws_open: wsClient?.readyState === WebSocket.OPEN,
         new_count: fresh.length,
         cache_total: lastSignals.length,
         signals: fresh.length > 0 ? fresh : lastSignals.slice(-5),
-        note:
-          fresh.length === 0
+        feed,
+        note: feed.blind
+          ? `Feed app BUTA (429): ${feed.reasons.join("; ")}. Frame yang masuk bukan data pasar — jangan dipakai sebagai konfirmasi.`
+          : fresh.length === 0
             ? "Belum ada perubahan sinyal/skor baru dalam jendela ini. Cek bridge_health atau pastikan feed pair sedang aktif."
             : undefined,
       });
@@ -1207,6 +1347,9 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
           signal: AbortSignal.timeout(3000),
         });
         const body = await res.text();
+        // `ok:true` hanya berarti soket lokal hidup. Feed app bisa buta (429)
+        // sambil tetap mengirim frame kosong, jadi status feed dilaporkan
+        // terpisah di sini — dibaca dari cache, nol request tambahan.
         return textResult({
           ok: res.ok,
           status: res.status,
@@ -1215,6 +1358,7 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
           market_scan_ws_open: marketScanWs?.readyState === WebSocket.OPEN,
           cache_signals: lastSignals.length,
           cache_market_scans: lastMarketScans.length,
+          feed: feedBlindness(),
         });
       } catch (e) {
         return textResult({ ok: false, error: String(e) });
@@ -1255,7 +1399,24 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         if (params.quote) q.set("quote", params.quote);
         if (params.limit != null) q.set("limit", String(params.limit));
         if (params.deepEval != null) q.set("deepEval", String(params.deepEval));
-        if (params.refresh) q.set("refresh", "true");
+        if (params.refresh) {
+          // `refresh` memaksa app memindai ~494 pair ke hostnya sendiri — tuas
+          // beban terbesar yang tersedia dari sini. Saat feed sudah buta, itu
+          // hanya memperpanjang 429. Tolak sebelum satu request pun keluar.
+          const feed = await ensureFeedState();
+          if (feed.blind) {
+            return textResult({
+              available: false,
+              refused: "FEED_BLIND",
+              error:
+                "Ditolak: `refresh` tidak dijalankan karena feed app sedang buta (429). " +
+                "Memaksa scan ulang menambah ~494 request ke host yang sudah gagal. " +
+                feed.reasons.join("; "),
+              feed,
+            });
+          }
+          q.set("refresh", "true");
+        }
         const qs = q.toString();
         const url = qs ? `${BRIDGE_HTTP}/api/v1/market/scan?${qs}` : `${BRIDGE_HTTP}/api/v1/market/scan`;
         const res = await fetch(url, { signal: AbortSignal.timeout(45000) });
@@ -1289,6 +1450,9 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       await new Promise((r) => setTimeout(r, seconds * 1000));
       const fresh = lastMarketScans.slice(before);
       const latest = fresh.length > 0 ? fresh[fresh.length - 1] : lastMarketScans[lastMarketScans.length - 1];
+      // Payload besar bukan bukti data segar: scanner mengulang 494 pair yang sama
+      // saat app buta. `feed` membedakan "tidak ada frame baru" dari "isi beku".
+      const feed = feedBlindness();
       return textResult({
         waited_seconds: seconds,
         ws_open: marketScanWs?.readyState === WebSocket.OPEN,
@@ -1296,6 +1460,10 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
         cache_total: lastMarketScans.length,
         latest: latest ?? null,
         updates: fresh,
+        feed,
+        note: feed.blind
+          ? `Feed app BUTA (429): ${feed.reasons.join("; ")}. ${latest?.totalPairsScanned ?? "?"} pair di payload adalah isi lama yang diulang, bukan hasil scan baru.`
+          : undefined,
       });
     },
   });
@@ -1393,6 +1561,24 @@ export default function analisaPasarBridge(pi: ExtensionAPI) {
       exchange: z.string().optional().describe("Bursa: TOKOCRYPTO atau INDODAX; kosong = bursa aktif di aplikasi"),
     }),
     async execute(_toolCallId, params) {
+      // Rute ini memproxy ke app, dan app menarik ticker dari hostnya sendiri.
+      // Saat feed buta (429), setiap panggilan menambah beban ke host yang sudah
+      // gagal dan jawabannya selalu `available:false, price:0`. Tolak lebih awal
+      // supaya beban tidak bertambah dan jawaban palsu itu tidak terbaca sebagai
+      // "pair tidak ada". Lihat skill triage-analisa-pasar-429-app-blind.
+      const feed = await ensureFeedState();
+      if (feed.blind) {
+        return textResult({
+          available: false,
+          refused: "FEED_BLIND",
+          symbol: params.symbol,
+          error:
+            "Ditolak: feed app sedang buta (429). Panggilan ini tidak dikirim ke app, " +
+            "jadi nol request tambahan ke host bursa. " +
+            feed.reasons.join("; "),
+          feed,
+        });
+      }
       try {
         const q = new URLSearchParams({ symbol: params.symbol || "" });
         if (params.exchange) q.set("exchange", params.exchange);
