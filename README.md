@@ -202,3 +202,5 @@ app/src/main/java/agu/analys/
 | [`SCALP_EXIT.md`](SCALP_EXIT.md) | Logika exit paper trade & R net |
 | [`TOKOCRYPTO_API_COMPLIANCE.md`](TOKOCRYPTO_API_COMPLIANCE.md) | Kepatuhan integrasi API Tokocrypto |
 | [`workplan2.md`](workplan2.md) | Fase kerja P0–P3, slider map, alur `ScalpingRuntimeConfig` |
+| [`tools/omp-tv-adapter/CHECKPOINT_OMP.md`](tools/omp-tv-adapter/CHECKPOINT_OMP.md) | **Checkpoint install ulang** agen omp TradingView→Tokocrypto (restore, token, prompt, alur gate, troubleshooting) |
+| [`tools/omp-tv-adapter/README.md`](tools/omp-tv-adapter/README.md) | Paket adapter + skill + runbook (restore dari repo) |

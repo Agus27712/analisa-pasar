@@ -1,0 +1,7 @@
+# Runtime artifacts (never commit)
+packets/
+*.log
+tv-lens-token.txt
+__pycache__/
+*.pyc
+*.tmp
